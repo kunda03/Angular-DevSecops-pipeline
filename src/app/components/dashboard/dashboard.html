@@ -1,0 +1,391 @@
+<div class="container mt-4">
+  <h2 class="text-center mb-4">Course Performance Dashboard</h2>
+
+  <!--
+    Summary Dashboard Cards
+    -->
+
+  <div class="row g-4 mb-4">
+    <div class="col-lg-3 col-md-6">
+      <app-summary-card
+        title="Total Students"
+        [value]="totalStudents"
+        bgColor="primary"
+        icon="bi bi-people-fill"
+      >
+      </app-summary-card>
+    </div>
+
+    <div class="col-lg-3 col-md-6">
+      <app-summary-card
+        title="Active Students"
+        [value]="activeStudents"
+        bgColor="success"
+        icon="bi bi-person-check-fill"
+      >
+      </app-summary-card>
+    </div>
+
+    <div class="col-lg-3 col-md-6">
+      <app-summary-card
+        title="Total Courses"
+        [value]="totalCourses"
+        bgColor="warning"
+        icon="bi bi-book-fill"
+      >
+      </app-summary-card>
+    </div>
+
+    <div class="col-lg-3 col-md-6">
+      <app-summary-card
+        title="Pending Fees"
+        [value]="pendingFees"
+        bgColor="danger"
+        icon="bi bi-cash-stack"
+      >
+      </app-summary-card>
+    </div>
+  </div>
+
+  <!-- ===========================
+         Search Student
+    ============================ -->
+
+  <div class="row mb-3">
+  <div class="col-md-4">
+
+    <form [formGroup]="searchForm">
+
+      <input
+        type="text"
+        class="form-control"
+        placeholder="Search by Name or Course..."
+        formControlName="search"
+        (keyup)="searchStudents()">
+
+    </form>
+
+  </div>
+</div>
+
+  <!-- ===========================
+         Sorting Student Table Ascending And Descending 
+    ============================ -->
+
+  <table class="table table-bordered table-striped table-hover">
+    <thead class="table-dark">
+      <tr>
+        <th>ID</th>
+
+        <th style="cursor: pointer" (click)="sortStudents('name')">Name ▲▼</th>
+
+        <th>Email</th>
+
+        <th>Course</th>
+
+        <th style="cursor: pointer" (click)="sortStudents('marks')">Marks ▲▼</th>
+
+        <th style="cursor: pointer" (click)="sortStudents('attendance')">Attendance ▲▼</th>
+
+        <th>Fee Status</th>
+
+        <th>Status</th>
+
+        <th>Actions</th>
+      </tr>
+    </thead>
+
+    <tbody>
+      <tr *ngFor="let student of paginatedStudents">
+        <td>{{ student.id }}</td>
+
+        <td>{{ student.name }}</td>
+
+        <td>{{ student.email }}</td>
+
+        <td>{{ student.course }}</td>
+
+        <td>{{ student.marks }}</td>
+
+
+        <!-- Attendance Progress Bar -->
+
+        <td>
+          <div class="progress" style="height: 20px">
+            <div
+              class="progress-bar bg-success"
+              role="progressbar"
+              [style.width.%]="student.attendance"
+            >
+              {{ student.attendance }}%
+            </div>
+          </div>
+        </td>
+
+        <td>{{ student.feeStatus }}</td>
+
+        <td>{{ student.status }}</td>
+
+        <!-- View  Student Details -->
+        <td>
+          <button
+            class="btn btn-primary btn-sm me-2"
+            data-bs-toggle="modal"
+            data-bs-target="#studentModal"
+            (click)="viewStudent(student)"
+          >
+            <i class="bi bi-eye-fill"></i>
+          </button>
+
+          <!-- Create Edit Student Details -->
+          <button
+            class="btn btn-warning btn-sm"
+            data-bs-toggle="modal"
+            data-bs-target="#editStudentModal"
+            (click)="editStudent(student)"
+          >
+            <i class="bi bi-pencil-square"></i>
+          </button>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- ===========================
+     Pagination
+=========================== -->
+
+  <div class="d-flex justify-content-between align-items-center mt-3">
+    <!-- Previous Button -->
+    <button class="btn btn-primary" (click)="previousPage()" [disabled]="currentPage === 1">
+      Previous
+    </button>
+
+    <!-- Current Page Number -->
+    <span class="fw-bold"> Page {{ currentPage }} of {{ totalPages }} </span>
+
+    <!-- Next Button -->
+    <button class="btn btn-primary" (click)="nextPage()" [disabled]="currentPage === totalPages">
+      Next
+    </button>
+  </div>
+</div>
+
+<!-- ===========================
+     Student Performance Chart
+=========================== -->
+
+<div class="card shadow mt-4">
+  <div class="card-body">
+    <h4 class="text-center fw-bold mb-3">Student Performance Chart</h4>
+
+    <canvas id="marksChart"></canvas>
+  </div>
+</div>
+
+<!-- ===========================
+   Create Chart Student Details Modal
+=========================== -->
+
+<div
+  class="modal fade"
+  id="studentModal"
+  tabindex="-1"
+  aria-labelledby="studentModalLabel"
+  aria-hidden="true"
+>
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <!-- Modal Header -->
+      <div class="modal-header">
+        <h5 class="modal-title fw-bold" id="studentModalLabel">Student Details</h5>
+
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+
+      <!-- Modal Body -->
+      <div class="modal-body" *ngIf="selectedStudent">
+        <p><strong>ID :</strong> {{ selectedStudent.id }}</p>
+
+        <p><strong>Name :</strong> {{ selectedStudent.name }}</p>
+
+        <p><strong>Email :</strong> {{ selectedStudent.email }}</p>
+
+        <p><strong>Course :</strong> {{ selectedStudent.course }}</p>
+
+        <p><strong>Marks :</strong> {{ selectedStudent.marks }}</p>
+
+        <p><strong>Attendance :</strong> {{ selectedStudent.attendance }}%</p>
+
+        <p><strong>Fee Status :</strong> {{ selectedStudent.feeStatus }}</p>
+
+        <p><strong>Status :</strong> {{ selectedStudent.status }}</p>
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- ===========================
+     Edit Student Modal
+=========================== -->
+
+<div
+  class="modal fade"
+  id="editStudentModal"
+  tabindex="-1"
+  aria-labelledby="editStudentModalLabel"
+  aria-hidden="true">
+
+  <div class="modal-dialog modal-lg">
+
+    <div class="modal-content">
+
+      <!-- Modal Header -->
+      <div class="modal-header">
+
+        <h5
+          class="modal-title fw-bold"
+          id="editStudentModalLabel">
+
+          Edit Student
+
+        </h5>
+
+        <button
+          type="button"
+          class="btn-close"
+          data-bs-dismiss="modal">
+        </button>
+
+      </div>
+
+      <!-- Modal Body -->
+      <div class="modal-body">
+
+        <form [formGroup]="studentForm">
+
+          <div class="row">
+
+            <div class="col-md-6 mb-3">
+
+              <label class="form-label">Name</label>
+
+              <input
+                type="text"
+                class="form-control"
+                formControlName="name">
+
+            </div>
+
+            <div class="col-md-6 mb-3">
+
+              <label class="form-label">Email</label>
+
+              <input
+                type="email"
+                class="form-control"
+                formControlName="email">
+
+            </div>
+
+            <div class="col-md-6 mb-3">
+
+              <label class="form-label">Course</label>
+
+              <input
+                type="text"
+                class="form-control"
+                formControlName="course">
+
+            </div>
+
+            <div class="col-md-6 mb-3">
+
+              <label class="form-label">Marks</label>
+
+              <input
+                type="number"
+                class="form-control"
+                formControlName="marks">
+
+            </div>
+
+            <div class="col-md-6 mb-3">
+
+              <label class="form-label">Attendance</label>
+
+              <input
+                type="number"
+                class="form-control"
+                formControlName="attendance">
+
+            </div>
+
+            <div class="col-md-6 mb-3">
+
+              <label class="form-label">Fee Status</label>
+
+              <select
+                class="form-select"
+                formControlName="feeStatus">
+
+                <option>Paid</option>
+                <option>Pending</option>
+
+              </select>
+
+            </div>
+
+            <div class="col-md-6 mb-3">
+
+              <label class="form-label">Status</label>
+
+              <select
+                class="form-select"
+                formControlName="status">
+
+                <option>Active</option>
+                <option>Inactive</option>
+
+              </select>
+
+            </div>
+
+          </div>
+
+        </form>
+
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="modal-footer">
+
+        <button
+          type="button"
+          class="btn btn-secondary"
+          data-bs-dismiss="modal">
+
+          Cancel
+
+        </button>
+
+        <button
+  class="btn btn-success"
+  (click)="updateStudent()"
+  [disabled]="studentForm.invalid">
+
+  Update Student
+
+</button>
+
+      </div>
+
+    </div>
+
+  </div>
+
+</div>

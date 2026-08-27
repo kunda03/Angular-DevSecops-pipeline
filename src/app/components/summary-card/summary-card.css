@@ -1,0 +1,13 @@
+.card{
+
+    border-radius:15px;
+    transition:.3s;
+    cursor:pointer;
+
+}
+
+.card:hover{
+
+    transform:translateY(-5px);
+
+}

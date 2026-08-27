@@ -1,0 +1,219 @@
+{
+  "students": [
+    {
+      "id": 1,
+      "name": "Gaurav Wagh",
+      "email": "rahul@gmail.com",
+      "course": "Java",
+      "marks": 85,
+      "attendance": 93,
+      "feeStatus": "Paid",
+      "status": "Active"
+    },
+    {
+      "id": 2,
+      "name": "Priya Sharma",
+      "email": "priya@gmail.com",
+      "age": 24,
+      "course": "React",
+      "marks": 91,
+      "attendance": 81,
+      "feeStatus": "Pending",
+      "status": "Active"
+    },
+    {
+      "id": 3,
+      "name": "Aman Verma",
+      "email": "aman@gmail.com",
+      "age": 23,
+      "course": "Java",
+      "marks": 75,
+      "attendance": 68,
+      "feeStatus": "Overdue",
+      "status": "Inactive"
+    },
+    {
+      "id": 4,
+      "name": "Sneha Joshi",
+      "email": "sneha@gmail.com",
+      "age": 21,
+      "course": "Python",
+      "marks": 88,
+      "attendance": 95,
+      "feeStatus": "Paid",
+      "status": "Active"
+    },
+    {
+      "id": 5,
+      "name": "Rohan Deshmukh",
+      "email": "rohan@gmail.com",
+      "age": 22,
+      "course": "Node.js",
+      "marks": 79,
+      "attendance": 84,
+      "feeStatus": "Paid",
+      "status": "Active"
+    },
+    {
+      "id": 6,
+      "name": "Vishakha Patil",
+      "email": "vishakha@gmail.com",
+      "age": 23,
+      "course": "Angular",
+      "marks": 93,
+      "attendance": 97,
+      "feeStatus": "Paid",
+      "status": "Active"
+    },
+    {
+      "id": 7,
+      "name": "Ganesh Raghunath Patil",
+      "email": "ganesh@gmail.com",
+      "course": "React",
+      "marks": 72,
+      "attendance": 70,
+      "feeStatus": "Pending",
+      "status": "Inactive"
+    },
+    {
+      "id": 8,
+      "name": "Neha Singh",
+      "email": "neha@gmail.com",
+      "age": 22,
+      "course": "Python",
+      "marks": 89,
+      "attendance": 90,
+      "feeStatus": "Paid",
+      "status": "Active"
+    },
+    {
+      "id": 9,
+      "name": "Bhavesh Purushottam Mali",
+      "email": "bhavesh@gmail.com",
+      "course": "Java",
+      "marks": 67,
+      "attendance": 73,
+      "feeStatus": "Overdue",
+      "status": "Inactive"
+    },
+    {
+      "id": 10,
+      "name": "Anjali Patil",
+      "email": "anjali@gmail.com",
+      "age": 21,
+      "course": "Angular",
+      "marks": 95,
+      "attendance": 98,
+      "feeStatus": "Paid",
+      "status": "Active"
+    },
+    {
+      "id": 11,
+      "name": "Karan Mehta",
+      "email": "karan@gmail.com",
+      "age": 23,
+      "course": "React",
+      "marks": 81,
+      "attendance": 87,
+      "feeStatus": "Paid",
+      "status": "Active"
+    },
+    {
+      "id": 12,
+      "name": "Ritika Jain",
+      "email": "ritika@gmail.com",
+      "age": 22,
+      "course": "Python",
+      "marks": 90,
+      "attendance": 93,
+      "feeStatus": "Pending",
+      "status": "Active"
+    },
+    {
+      "id": 13,
+      "name": "Mohit Yogesh Patil",
+      "email": "mohitypatil2010@gmail.com",
+      "course": "Java",
+      "marks": 76,
+      "attendance": 78,
+      "feeStatus": "Pending",
+      "status": "Active"
+    },
+    {
+      "id": 14,
+      "name": "Komal Patil",
+      "email": "komal@gmail.com",
+      "age": 21,
+      "course": "Angular",
+      "marks": 87,
+      "attendance": 91,
+      "feeStatus": "Paid",
+      "status": "Active"
+    },
+    {
+      "id": 15,
+      "name": "Om Vijay Patil",
+      "email": "ompatil2012@gmail.com",
+      "age": 18,
+      "course": "Node.js",
+      "marks": 47,
+      "attendance": 57,
+      "feeStatus": "Pending",
+      "status": "Inactive"
+    },
+    {
+      "id": 16,
+      "name": "Shreya Patil",
+      "email": "shreya@gmail.com",
+      "age": 22,
+      "course": "React",
+      "marks": 92,
+      "attendance": 94,
+      "feeStatus": "Paid",
+      "status": "Active"
+    },
+    {
+      "id": 17,
+      "name": "Siddhesh Patil",
+      "email": "aditya@gmail.com",
+      "age": 24,
+      "course": "Python",
+      "marks": 74,
+      "attendance": 69,
+      "feeStatus": "Pending",
+      "status": "Inactive"
+    },
+    {
+      "id": 18,
+      "name": "Kunal Prakash Gavande",
+      "email": "meera@gmail.com",
+      "age": 23,
+      "course": "Angular",
+      "marks": 86,
+      "attendance": 89,
+      "feeStatus": "Paid",
+      "status": "Active"
+    },
+    {
+      "id": 19,
+      "name": "Soham Sandip Patil",
+      "email": "soham@gmail.com",
+      "course": "Java",
+      "marks": 60,
+      "attendance": 71,
+      "feeStatus": "Pending",
+      "status": "Active"
+    },
+    {
+      "id": 20,
+      "name": "Veera Mayur Ingale",
+      "email": "sakshi@gmail.com",
+      "age": 21,
+      "course": "Node.js",
+      "marks": 94,
+      "attendance": 96,
+      "feeStatus": "Paid",
+      "status": "Active"
+    }
+  ]
+}

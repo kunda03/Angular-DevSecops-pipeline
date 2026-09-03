@@ -278,10 +278,12 @@ pipeline {
         // 11. Deploy to Kubernetes
         // =========================================================
         stage('Deploy to Kubernetes') {
-            steps {
-                echo 'Deploying Angular application to Kubernetes...'
 
-                sh '''
+    steps {
+
+        echo 'Deploying Angular application to Kubernetes...'
+
+        sh '''
             set -e
 
             echo "Cloning Kubernetes infrastructure repository..."
@@ -293,78 +295,82 @@ pipeline {
             echo "Kubernetes files:"
             find k8s-infra/k8s -maxdepth 1 -type f -print
 
-            echo "Applying Kubernetes namespace..."
+            echo "Applying namespace..."
 
             kubectl apply -f k8s-infra/k8s/namespace.yaml
 
-            echo "Applying Kubernetes deployment..."
+            echo "Creating JSON Server ConfigMap from db.json..."
+
+            kubectl create configmap json-server-data \
+                --from-file=db.json=db.json \
+                -n course-dashboard \
+                --dry-run=client -o yaml | kubectl apply -f -
+
+            echo "Applying JSON Server deployment..."
+
+            kubectl apply -f k8s-infra/k8s/json-server-deployment.yaml
+
+            echo "Applying JSON Server service..."
+
+            kubectl apply -f k8s-infra/k8s/json-server-service.yaml
+
+            echo "Applying Angular deployment..."
 
             kubectl apply -f k8s-infra/k8s/deployment.yaml
 
-            echo "Applying Kubernetes service..."
+            echo "Applying Angular service..."
 
             kubectl apply -f k8s-infra/k8s/service.yaml
 
             echo "Kubernetes resources applied successfully!"
         '''
-            }
-        }
+    }
+}
 
         // =========================================================
         // 12. Verify Deployment
         // =========================================================
         stage('Verify Deployment') {
-            steps {
-                echo 'Verifying Kubernetes deployment...'
 
-                sh '''
-                    set -e
+    steps {
 
-                    echo "Checking namespace..."
+        echo 'Verifying Kubernetes deployment...'
 
-                    kubectl get namespace "$K8S_NAMESPACE"
+        sh '''
+            set -e
 
-                    echo "Checking pods..."
+            echo "Checking namespace..."
+            kubectl get namespace course-dashboard
 
-                    kubectl get pods \
-                        -n "$K8S_NAMESPACE" \
-                        -o wide
+            echo "Checking JSON Server..."
+            kubectl get pods -n course-dashboard -l app=json-server
 
-                    echo "Checking services..."
+            echo "Checking Angular pods..."
+            kubectl get pods -n course-dashboard -l app=course-dashboard -o wide
 
-                    kubectl get svc \
-                        -n "$K8S_NAMESPACE"
+            echo "Checking services..."
+            kubectl get svc -n course-dashboard
 
-                    echo "Checking deployment..."
+            echo "Checking Angular deployment..."
+            kubectl get deployment course-dashboard -n course-dashboard
 
-                    kubectl get deployment "$K8S_DEPLOYMENT" \
-                        -n "$K8S_NAMESPACE"
+            echo "Checking JSON Server deployment..."
+            kubectl get deployment json-server -n course-dashboard
 
-                    echo "Waiting for deployment rollout..."
+            echo "Waiting for JSON Server rollout..."
+            kubectl rollout status deployment/json-server \
+                -n course-dashboard \
+                --timeout=120s
 
-                    kubectl rollout status \
-                        deployment/"$K8S_DEPLOYMENT" \
-                        -n "$K8S_NAMESPACE" \
-                        --timeout=120s
+            echo "Waiting for Angular rollout..."
+            kubectl rollout status deployment/course-dashboard \
+                -n course-dashboard \
+                --timeout=120s
 
-                    echo "Final pod status..."
-
-                    kubectl get pods \
-                        -n "$K8S_NAMESPACE"
-
-                    echo "Final service status..."
-
-                    kubectl get svc \
-                        -n "$K8S_NAMESPACE"
-
-                    echo "=============================================="
-                    echo "Kubernetes deployment successful!"
-                    echo "Namespace : $K8S_NAMESPACE"
-                    echo "Deployment: $K8S_DEPLOYMENT"
-                    echo "=============================================="
-                '''
-            }
-        }
+            echo "Deployment verified successfully!"
+        '''
+    }
+}
     }
 
     // =============================================================

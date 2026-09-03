@@ -1,60 +1,372 @@
-// =========================================================
-// 6. Deploy Angular Artifact to Nexus
-// =========================================================
-stage('Deploy to Nexus') {
+pipeline {
 
-    steps {
+    agent any
 
-        echo 'Publishing Angular npm artifact to Nexus...'
+    options {
+        skipDefaultCheckout(true)
+        timestamps()
+    }
 
-        withCredentials([
+    environment {
 
-            usernamePassword(
+        // =========================================================
+        // SonarQube Scanner
+        // =========================================================
+        SCANNER_HOME = tool 'sonar-scanner'
 
-                credentialsId: 'nexus-credentials',
 
-                usernameVariable: 'NEXUS_USERNAME',
+        // =========================================================
+        // Docker Image
+        // =========================================================
+        DOCKER_IMAGE = 'kundatoke03/course-performance-dashboard:latest'
 
-                passwordVariable: 'NEXUS_PASSWORD'
-            )
 
-        ]) {
+        // =========================================================
+        // AWS EKS Configuration
+        // =========================================================
+        EKS_CLUSTER = 'course-devsecops-cluster'
 
-            sh '''
-                set -e
+        AWS_REGION = 'us-east-1'
 
-                echo "Creating unique npm version..."
 
-                # Jenkins BUILD_NUMBER creates a unique version
-                VERSION="0.0.${BUILD_NUMBER}"
+        // =========================================================
+        // Nexus Configuration
+        // =========================================================
+        NEXUS_URL = 'http://44.201.199.252:8081/'
 
-                echo "Using package version: ${VERSION}"
+        NEXUS_REPOSITORY = 'npm-hosted'
+    }
 
-                npm version "${VERSION}" --no-git-tag-version
 
-                echo "Creating npm artifact..."
+    stages {
 
-                rm -f *.tgz
 
-                npm pack
+        // =========================================================
+        // 1. Git Checkout
+        // =========================================================
+        stage('Git Checkout') {
 
-                ARTIFACT=$(ls *.tgz | head -n 1)
+            steps {
 
-                echo "Created artifact: ${ARTIFACT}"
+                echo 'Checking out source code from GitHub...'
 
-                echo "Publishing package to Nexus..."
+                checkout scm
+            }
+        }
 
-                NEXUS_REGISTRY="${NEXUS_URL}/repository/${NEXUS_REPOSITORY}/"
 
-                AUTH_TOKEN=$(printf "%s:%s" "$NEXUS_USERNAME" "$NEXUS_PASSWORD" | base64 -w 0)
+        // =========================================================
+        // 2. Install Dependencies
+        // =========================================================
+        stage('Install Dependencies') {
 
-                npm publish "$ARTIFACT" \
-                    --registry="$NEXUS_REGISTRY" \
-                    --//${NEXUS_REGISTRY#http:}:_auth="$AUTH_TOKEN" \
-                    --//${NEXUS_REGISTRY#http:}:always-auth=true
+            steps {
 
-                echo "Package successfully published to Nexus!"
-            '''
+                echo 'Installing Angular dependencies...'
+
+                sh 'npm ci'
+            }
+        }
+
+
+        // =========================================================
+        // 3. Unit Tests
+        // =========================================================
+        stage('Unit Tests') {
+
+            steps {
+
+                echo 'Running Angular unit tests...'
+
+                sh '''
+                    export CHROME_BIN=/usr/bin/google-chrome
+
+                    npm test -- \
+                    --watch=false \
+                    --browsers=ChromeHeadless
+                '''
+            }
+        }
+
+
+        // =========================================================
+        // 4. SonarQube Analysis
+        // =========================================================
+        stage('SonarQube Analysis') {
+
+            steps {
+
+                echo 'Running SonarQube analysis...'
+
+                withSonarQubeEnv('sonar-scanner') {
+
+                    sh """
+                        ${SCANNER_HOME}/bin/sonar-scanner \
+                        -Dsonar.projectKey=COURSE-PERFORMANCE-DASHBOARD \
+                        -Dsonar.projectName=COURSE-PERFORMANCE-DASHBOARD \
+                        -Dsonar.sources=src \
+                        -Dsonar.exclusions=**/node_modules/**,**/dist/** \
+                        -Dsonar.javascript.lcov.reportPaths=coverage/**/lcov.info
+                    """
+                }
+            }
+        }
+
+
+        // =========================================================
+        // 5. OWASP Dependency Check
+        // =========================================================
+        stage('OWASP Dependency Check') {
+
+            steps {
+
+                echo 'Scanning Angular dependencies for vulnerabilities...'
+
+                dependencyCheck(
+
+                    additionalArguments:
+                        '--scan . ' +
+                        '--format XML ' +
+                        '--format HTML',
+
+                    odcInstallation: 'DC'
+                )
+            }
+        }
+
+
+        // =========================================================
+        // 6. Deploy Angular Artifact to Nexus
+        // =========================================================
+        stage('Deploy to Nexus') {
+
+            steps {
+
+                echo 'Publishing Angular npm artifact to Nexus...'
+
+                withCredentials([
+
+                    usernamePassword(
+
+                        credentialsId: 'nexus-credentials',
+
+                        usernameVariable: 'NEXUS_USERNAME',
+
+                        passwordVariable: 'NEXUS_PASSWORD'
+                    )
+
+                ]) {
+
+                    sh '''
+                        set -e
+
+                        echo "=============================================="
+                        echo "Creating unique npm package version..."
+                        echo "=============================================="
+
+                        VERSION="0.0.${BUILD_NUMBER}"
+
+                        echo "Using package version: ${VERSION}"
+
+                        npm version "${VERSION}" --no-git-tag-version
+
+                        echo "=============================================="
+                        echo "Creating npm artifact..."
+                        echo "=============================================="
+
+                        rm -f *.tgz
+
+                        npm pack
+
+                        ARTIFACT=$(ls *.tgz | head -n 1)
+
+                        echo "Created artifact: ${ARTIFACT}"
+
+                        echo "=============================================="
+                        echo "Publishing package to Nexus..."
+                        echo "=============================================="
+
+                        NEXUS_REGISTRY="${NEXUS_URL}/repository/${NEXUS_REPOSITORY}/"
+
+                        AUTH_TOKEN=$(printf "%s:%s" \
+                            "$NEXUS_USERNAME" \
+                            "$NEXUS_PASSWORD" | base64 -w 0)
+
+                        npm publish "$ARTIFACT" \
+                            --registry="$NEXUS_REGISTRY" \
+                            --//${NEXUS_REGISTRY#http:}:_auth="$AUTH_TOKEN" \
+                            --//${NEXUS_REGISTRY#http:}:always-auth=true
+
+                        echo "=============================================="
+                        echo "Package successfully published to Nexus!"
+                        echo "Version: ${VERSION}"
+                        echo "Artifact: ${ARTIFACT}"
+                        echo "=============================================="
+                    '''
+                }
+            }
+        }
+
+
+        // =========================================================
+        // 7. Angular Build
+        // =========================================================
+        stage('Angular Build') {
+
+            steps {
+
+                echo 'Building Angular application...'
+
+                sh 'npm run build'
+            }
+        }
+
+
+        // =========================================================
+        // 8. Build Docker Image
+        // =========================================================
+        stage('Build Docker Image') {
+
+            steps {
+
+                echo 'Building Docker image...'
+
+                sh """
+                    docker build \
+                    -t ${DOCKER_IMAGE} \
+                    -f Dockerfile .
+                """
+            }
+        }
+
+
+        // =========================================================
+        // 9. Push Image to Docker Hub
+        // =========================================================
+        stage('Push Image to Docker Hub') {
+
+            steps {
+
+                echo 'Logging in to Docker Hub...'
+
+                withCredentials([
+
+                    usernamePassword(
+
+                        credentialsId: 'dockerhub-pwd',
+
+                        usernameVariable: 'DOCKERHUB_USERNAME',
+
+                        passwordVariable: 'DOCKERHUB_PASSWORD'
+                    )
+
+                ]) {
+
+                    sh '''
+                        echo "$DOCKERHUB_PASSWORD" | docker login \
+                        --username "$DOCKERHUB_USERNAME" \
+                        --password-stdin
+                    '''
+
+                    sh 'docker push ${DOCKER_IMAGE}'
+                }
+            }
+        }
+
+
+        // =========================================================
+        // 10. Configure EKS
+        // =========================================================
+        stage('Configure EKS') {
+
+            steps {
+
+                echo 'Connecting Jenkins server to EKS cluster...'
+
+                sh '''
+                    aws eks update-kubeconfig \
+                    --region "$AWS_REGION" \
+                    --name "$EKS_CLUSTER"
+                '''
+            }
+        }
+
+
+        // =========================================================
+        // 11. Deploy to Kubernetes
+        // =========================================================
+        stage('Deploy to Kubernetes') {
+
+            steps {
+
+                echo 'Deploying Angular application to Kubernetes...'
+
+                sh '''
+                    kubectl apply -f k8s/namespace.yaml
+
+                    kubectl apply -f k8s/deployment.yaml
+
+                    kubectl apply -f k8s/service.yaml
+                '''
+            }
+        }
+
+
+        // =========================================================
+        // 12. Verify Deployment
+        // =========================================================
+        stage('Verify Deployment') {
+
+            steps {
+
+                echo 'Checking Kubernetes deployment...'
+
+                sh '''
+                    kubectl get nodes
+
+                    kubectl get pods -n course-dashboard
+
+                    kubectl get deployment -n course-dashboard
+
+                    kubectl get service -n course-dashboard
+                '''
+            }
+        }
+    }
+
+
+    // =============================================================
+    // POST ACTIONS
+    // =============================================================
+    post {
+
+        success {
+
+            echo '=============================================='
+
+            echo 'Angular CI/CD Pipeline completed successfully!'
+
+            echo 'Application deployed to EKS.'
+
+            echo '=============================================='
+        }
+
+
+        failure {
+
+            echo '=============================================='
+
+            echo 'Angular CI/CD Pipeline failed!'
+
+            echo 'Check the failed stage in Console Output.'
+
+            echo '=============================================='
+        }
+
+
+        always {
+
+            echo 'Pipeline execution completed.'
         }
     }
 }

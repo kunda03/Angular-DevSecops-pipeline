@@ -1,4 +1,5 @@
 pipeline {
+
     agent any
 
     options {
@@ -7,6 +8,7 @@ pipeline {
     }
 
     environment {
+
         // =========================================================
         // SonarQube Scanner
         // =========================================================
@@ -38,11 +40,14 @@ pipeline {
     }
 
     stages {
+
         // =========================================================
         // 1. Git Checkout
         // =========================================================
         stage('Git Checkout') {
+
             steps {
+
                 echo 'Checking out source code from GitHub...'
 
                 checkout scm
@@ -53,7 +58,9 @@ pipeline {
         // 2. Install Dependencies
         // =========================================================
         stage('Install Dependencies') {
+
             steps {
+
                 echo 'Installing Angular dependencies...'
 
                 sh '''
@@ -68,7 +75,9 @@ pipeline {
         // 3. Unit Tests
         // =========================================================
         stage('Unit Tests') {
+
             steps {
+
                 echo 'Checking Google Chrome installation...'
 
                 sh '''
@@ -93,10 +102,13 @@ pipeline {
         // 4. SonarQube Analysis
         // =========================================================
         stage('SonarQube Analysis') {
+
             steps {
+
                 echo 'Running SonarQube analysis...'
 
                 withSonarQubeEnv('sonarqube') {
+
                     sh """
                         ${SCANNER_HOME}/bin/sonar-scanner \
                         -Dsonar.projectKey=COURSE-PERFORMANCE-DASHBOARD \
@@ -113,25 +125,32 @@ pipeline {
         // 5. OWASP Dependency Check
         // =========================================================
         stage('OWASP Dependency Check') {
+
             steps {
+
                 echo 'Scanning Angular dependencies for vulnerabilities...'
 
                 dependencyCheck(
-            additionalArguments:
-                '--scan . ' +
-                '--format XML ' +
-                '--format HTML ' +
-                '--noupdate ' +
-                '--data /var/lib/jenkins/dependency-check-data',
-            odcInstallation: 'DC'
-        )
+                    additionalArguments:
+                        '--scan package.json ' +
+                        '--scan package-lock.json ' +
+                        '--noupdate ' +
+                        '--data /var/lib/jenkins/dependency-check-data ' +
+                        '--format HTML ' +
+                        '--format XML ' +
+                        '--failOnCVSS 11',
+                    odcInstallation: 'DC'
+                )
             }
         }
+
         // =========================================================
         // 6. Deploy Angular Artifact to Nexus
         // =========================================================
         stage('Deploy to Nexus') {
+
             steps {
+
                 echo 'Creating Angular npm artifact...'
 
                 sh '''
@@ -149,6 +168,7 @@ pipeline {
                     )
 
                 ]) {
+
                     sh '''
                         ARTIFACT=$(ls *.tgz | head -n 1)
 
@@ -167,7 +187,9 @@ pipeline {
         // 7. Angular Build
         // =========================================================
         stage('Angular Build') {
+
             steps {
+
                 echo 'Building Angular application...'
 
                 sh '''
@@ -180,7 +202,9 @@ pipeline {
         // 8. Build Docker Image
         // =========================================================
         stage('Build Docker Image') {
+
             steps {
+
                 echo 'Building Docker image...'
 
                 sh '''
@@ -195,7 +219,9 @@ pipeline {
         // 9. Push Image to Docker Hub
         // =========================================================
         stage('Push Image to Docker Hub') {
+
             steps {
+
                 echo 'Logging in to Docker Hub...'
 
                 withCredentials([
@@ -207,6 +233,7 @@ pipeline {
                     )
 
                 ]) {
+
                     sh '''
                         echo "$DOCKERHUB_PASSWORD" | \
                         docker login \
@@ -225,7 +252,9 @@ pipeline {
         // 10. Configure EKS
         // =========================================================
         stage('Configure EKS') {
+
             steps {
+
                 echo 'Connecting Jenkins server to EKS cluster...'
 
                 sh '''
@@ -242,7 +271,9 @@ pipeline {
         // 11. Deploy to Kubernetes
         // =========================================================
         stage('Deploy to Kubernetes') {
+
             steps {
+
                 echo 'Deploying Angular application to Kubernetes...'
 
                 sh '''
@@ -259,7 +290,9 @@ pipeline {
         // 12. Verify Deployment
         // =========================================================
         stage('Verify Deployment') {
+
             steps {
+
                 echo 'Checking Kubernetes deployment...'
 
                 sh '''
@@ -279,7 +312,9 @@ pipeline {
     // POST ACTIONS
     // =============================================================
     post {
+
         success {
+
             echo '=============================================='
 
             echo 'Angular CI/CD Pipeline completed successfully!'
@@ -290,6 +325,7 @@ pipeline {
         }
 
         failure {
+
             echo '=============================================='
 
             echo 'Angular CI/CD Pipeline failed!'
@@ -300,6 +336,7 @@ pipeline {
         }
 
         always {
+
             echo 'Pipeline execution completed.'
         }
     }

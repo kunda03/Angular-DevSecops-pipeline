@@ -29,7 +29,7 @@ pipeline {
 
 
         // =========================================================
-        // Chrome Configuration
+        // Google Chrome
         // =========================================================
         CHROME_BIN = '/usr/bin/google-chrome'
 
@@ -37,7 +37,7 @@ pipeline {
         // =========================================================
         // Nexus Configuration
         // =========================================================
-        NEXUS_URL = 'http://44.201.199.252:8081'
+        NEXUS_URL = 'http://44.201.199.252:8081/'
         NEXUS_REPOSITORY = 'npm-hosted'
     }
 
@@ -52,7 +52,7 @@ pipeline {
 
             steps {
 
-                echo 'Checking out source code...'
+                echo 'Checking out source code from GitHub...'
 
                 checkout scm
             }
@@ -71,6 +71,7 @@ pipeline {
                 sh '''
                     node --version
                     npm --version
+
                     npm ci
                 '''
             }
@@ -87,18 +88,26 @@ pipeline {
                 echo 'Running Angular unit tests...'
 
                 sh '''
-                    echo "Checking Chrome installation..."
+                    echo "Checking Google Chrome..."
+
                     which google-chrome
                     google-chrome --version
 
-                    echo "Setting Chrome binary..."
+                    echo "Checking Chrome for Jenkins user..."
+
+                    sudo -u jenkins /usr/bin/google-chrome --version
+
+                    echo "Setting CHROME_BIN..."
+
                     export CHROME_BIN=/usr/bin/google-chrome
 
                     echo "CHROME_BIN=$CHROME_BIN"
 
+                    test -x "$CHROME_BIN"
+
                     echo "Running Angular unit tests..."
 
-                    npm test -- --watch=false --browsers=ChromeHeadless
+                    CHROME_BIN=/usr/bin/google-chrome npm test -- --watch=false --browsers=ChromeHeadless
                 '''
             }
         }
@@ -118,12 +127,12 @@ pipeline {
                     sh '''
                         echo "Running SonarQube Scanner..."
 
-                        "$SCANNER_HOME/bin/sonar-scanner" \
-                        -Dsonar.projectKey=COURSE-PERFORMANCE-DASHBOARD \
-                        -Dsonar.projectName=COURSE-PERFORMANCE-DASHBOARD \
-                        -Dsonar.sources=src \
-                        -Dsonar.exclusions=**/node_modules/**,**/dist/** \
-                        -Dsonar.javascript.lcov.reportPaths=coverage/**/lcov.info
+                        $SCANNER_HOME/bin/sonar-scanner \
+                          -Dsonar.projectKey=COURSE-PERFORMANCE-DASHBOARD \
+                          -Dsonar.projectName=COURSE-PERFORMANCE-DASHBOARD \
+                          -Dsonar.sources=src \
+                          -Dsonar.exclusions=**/node_modules/**,**/dist/** \
+                          -Dsonar.javascript.lcov.reportPaths=coverage/**/lcov.info
                     '''
                 }
             }
@@ -184,11 +193,12 @@ pipeline {
                     sh '''
                         ARTIFACT=$(ls *.tgz | head -n 1)
 
-                        echo "Artifact: $ARTIFACT"
+                        echo "Uploading artifact: $ARTIFACT"
 
-                        curl -f -u "$NEXUS_USERNAME:$NEXUS_PASSWORD" \
-                        --upload-file "$ARTIFACT" \
-                        "$NEXUS_URL/repository/$NEXUS_REPOSITORY/$ARTIFACT"
+                        curl -f \
+                          -u "$NEXUS_USERNAME:$NEXUS_PASSWORD" \
+                          --upload-file "$ARTIFACT" \
+                          "$NEXUS_URL/repository/$NEXUS_REPOSITORY/$ARTIFACT"
                     '''
                 }
             }
@@ -222,8 +232,8 @@ pipeline {
 
                 sh '''
                     docker build \
-                    -t "$DOCKER_IMAGE" \
-                    -f Dockerfile .
+                      -t "$DOCKER_IMAGE" \
+                      -f Dockerfile .
                 '''
             }
         }
@@ -253,10 +263,12 @@ pipeline {
 
                     sh '''
                         echo "$DOCKERHUB_PASSWORD" | docker login \
-                        --username "$DOCKERHUB_USERNAME" \
-                        --password-stdin
+                          --username "$DOCKERHUB_USERNAME" \
+                          --password-stdin
 
                         docker push "$DOCKER_IMAGE"
+
+                        docker logout
                     '''
                 }
             }
@@ -276,8 +288,8 @@ pipeline {
                     aws --version
 
                     aws eks update-kubeconfig \
-                    --region "$AWS_REGION" \
-                    --name "$EKS_CLUSTER"
+                      --region "$AWS_REGION" \
+                      --name "$EKS_CLUSTER"
 
                     kubectl config current-context
                 '''

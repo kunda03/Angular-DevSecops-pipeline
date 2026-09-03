@@ -309,18 +309,38 @@ pipeline {
         // =========================================================
         stage('Deploy to Kubernetes') {
 
-            steps {
+    steps {
 
-                echo 'Deploying Angular application to Kubernetes...'
+        echo 'Deploying Angular application to Kubernetes...'
 
-                sh '''
-                    kubectl apply -f k8s/namespace.yaml
-                    kubectl apply -f k8s/deployment.yaml
-                    kubectl apply -f k8s/service.yaml
-                '''
-            }
-        }
+        sh '''
+            set -e
 
+            echo "Cloning Kubernetes infrastructure repository..."
+
+            rm -rf k8s-infra
+
+            git clone -b dev https://github.com/kunda03/Course-DevSecOps-K8s-Infra.git k8s-infra
+
+            echo "Kubernetes files:"
+            find k8s-infra/k8s -maxdepth 1 -type f -print
+
+            echo "Applying Kubernetes namespace..."
+
+            kubectl apply -f k8s-infra/k8s/namespace.yaml
+
+            echo "Applying Kubernetes deployment..."
+
+            kubectl apply -f k8s-infra/k8s/deployment.yaml
+
+            echo "Applying Kubernetes service..."
+
+            kubectl apply -f k8s-infra/k8s/service.yaml
+
+            echo "Kubernetes resources applied successfully!"
+        '''
+    }
+}
 
         // =========================================================
         // 12. Verify Deployment

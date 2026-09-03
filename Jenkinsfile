@@ -16,6 +16,12 @@ pipeline {
 
 
         // =========================================================
+        // Chrome for Angular Unit Tests
+        // =========================================================
+        CHROME_BIN = '/usr/bin/google-chrome'
+
+
+        // =========================================================
         // Docker Image
         // =========================================================
         DOCKER_IMAGE = 'kundatoke03/course-performance-dashboard:latest'
@@ -32,7 +38,7 @@ pipeline {
         // =========================================================
         // Nexus Configuration
         // =========================================================
-        NEXUS_URL = 'http://44.201.199.252:8081/'
+        NEXUS_URL = 'http://44.201.199.252:8081'
 
         NEXUS_REPOSITORY = 'npm-hosted'
     }
@@ -48,6 +54,8 @@ pipeline {
 
             steps {
 
+                echo 'Checking out source code from GitHub...'
+
                 checkout scm
             }
         }
@@ -62,7 +70,11 @@ pipeline {
 
                 echo 'Installing Angular dependencies...'
 
-                sh 'npm ci'
+                sh '''
+                    node --version
+                    npm --version
+                    npm ci
+                '''
             }
         }
 
@@ -74,12 +86,22 @@ pipeline {
 
             steps {
 
+                echo 'Checking Google Chrome installation...'
+
+                sh '''
+                    echo "CHROME_BIN=$CHROME_BIN"
+                    which google-chrome
+                    google-chrome --version
+                '''
+
                 echo 'Running Angular unit tests...'
 
                 sh '''
+                    export CHROME_BIN=/usr/bin/google-chrome
+
                     npm test -- \
-                    --watch=false \
-                    --browsers=ChromeHeadless
+                        --watch=false \
+                        --browsers=ChromeHeadless
                 '''
             }
         }
@@ -119,12 +141,10 @@ pipeline {
                 echo 'Scanning Angular dependencies for vulnerabilities...'
 
                 dependencyCheck(
-
                     additionalArguments:
                         '--scan . ' +
                         '--format XML ' +
                         '--format HTML',
-
                     odcInstallation: 'DC'
                 )
             }
@@ -140,19 +160,17 @@ pipeline {
 
                 echo 'Creating Angular npm artifact...'
 
-                sh 'npm pack'
-
+                sh '''
+                    npm pack
+                '''
 
                 echo 'Uploading Angular artifact to Nexus...'
 
                 withCredentials([
 
                     usernamePassword(
-
                         credentialsId: 'nexus-credentials',
-
                         usernameVariable: 'NEXUS_USERNAME',
-
                         passwordVariable: 'NEXUS_PASSWORD'
                     )
 
@@ -161,7 +179,10 @@ pipeline {
                     sh '''
                         ARTIFACT=$(ls *.tgz | head -n 1)
 
-                        curl -u "$NEXUS_USERNAME:$NEXUS_PASSWORD" \
+                        echo "Uploading artifact: $ARTIFACT"
+
+                        curl -f \
+                        -u "$NEXUS_USERNAME:$NEXUS_PASSWORD" \
                         --upload-file "$ARTIFACT" \
                         "$NEXUS_URL/repository/$NEXUS_REPOSITORY/$ARTIFACT"
                     '''
@@ -179,7 +200,9 @@ pipeline {
 
                 echo 'Building Angular application...'
 
-                sh 'npm run build'
+                sh '''
+                    npm run build
+                '''
             }
         }
 
@@ -193,17 +216,17 @@ pipeline {
 
                 echo 'Building Docker image...'
 
-                sh """
+                sh '''
                     docker build \
-                    -t ${DOCKER_IMAGE} \
+                    -t "$DOCKER_IMAGE" \
                     -f Dockerfile .
-                """
+                '''
             }
         }
 
 
         // =========================================================
-        // 9. Push Docker Image to Docker Hub
+        // 9. Push Image to Docker Hub
         // =========================================================
         stage('Push Image to Docker Hub') {
 
@@ -214,23 +237,23 @@ pipeline {
                 withCredentials([
 
                     usernamePassword(
-
                         credentialsId: 'dockerhub-pwd',
-
                         usernameVariable: 'DOCKERHUB_USERNAME',
-
                         passwordVariable: 'DOCKERHUB_PASSWORD'
                     )
 
                 ]) {
 
                     sh '''
-                        echo "$DOCKERHUB_PASSWORD" | docker login \
+                        echo "$DOCKERHUB_PASSWORD" | \
+                        docker login \
                         --username "$DOCKERHUB_USERNAME" \
                         --password-stdin
                     '''
 
-                    sh 'docker push ${DOCKER_IMAGE}'
+                    sh '''
+                        docker push "$DOCKER_IMAGE"
+                    '''
                 }
             }
         }
@@ -246,11 +269,11 @@ pipeline {
                 echo 'Connecting Jenkins server to EKS cluster...'
 
                 sh '''
+                    aws --version
 
                     aws eks update-kubeconfig \
                     --region "$AWS_REGION" \
                     --name "$EKS_CLUSTER"
-
                 '''
             }
         }

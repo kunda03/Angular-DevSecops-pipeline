@@ -25,17 +25,19 @@ pipeline {
         // AWS EKS Configuration
         // =========================================================
         EKS_CLUSTER = 'course-devsecops-cluster'
+        AWS_REGION  = 'us-east-1'
 
-        AWS_REGION = 'us-east-1'
 
+        // =========================================================
+        // Chrome Configuration
+        // =========================================================
         CHROME_BIN = '/usr/bin/google-chrome'
 
 
         // =========================================================
         // Nexus Configuration
         // =========================================================
-        NEXUS_URL = 'http://44.201.199.252:8081/'
-
+        NEXUS_URL = 'http://44.201.199.252:8081'
         NEXUS_REPOSITORY = 'npm-hosted'
     }
 
@@ -49,6 +51,8 @@ pipeline {
         stage('Git Checkout') {
 
             steps {
+
+                echo 'Checking out source code...'
 
                 checkout scm
             }
@@ -64,7 +68,11 @@ pipeline {
 
                 echo 'Installing Angular dependencies...'
 
-                sh 'npm ci'
+                sh '''
+                    node --version
+                    npm --version
+                    npm ci
+                '''
             }
         }
 
@@ -76,29 +84,19 @@ pipeline {
 
             steps {
 
-                echo 'Checking Chrome installation...'
+                echo 'Running Angular unit tests...'
 
                 sh '''
-                    echo "=============================================="
-                    echo "Chrome Environment Check"
-                    echo "=============================================="
+                    echo "Checking Chrome installation..."
+                    which google-chrome
+                    google-chrome --version
+
+                    echo "Setting Chrome binary..."
+                    export CHROME_BIN=/usr/bin/google-chrome
 
                     echo "CHROME_BIN=$CHROME_BIN"
 
-                    echo "Checking google-chrome location..."
-                    which google-chrome
-
-                    echo "Checking Chrome binary..."
-                    ls -l /usr/bin/google-chrome
-
-                    echo "Checking Chrome version..."
-                    google-chrome --version
-
-                    echo "=============================================="
                     echo "Running Angular unit tests..."
-                    echo "=============================================="
-
-                    export CHROME_BIN=/usr/bin/google-chrome
 
                     npm test -- --watch=false --browsers=ChromeHeadless
                 '''
@@ -117,14 +115,16 @@ pipeline {
 
                 withSonarQubeEnv('sonar-scanner') {
 
-                    sh """
-                        ${SCANNER_HOME}/bin/sonar-scanner \
+                    sh '''
+                        echo "Running SonarQube Scanner..."
+
+                        "$SCANNER_HOME/bin/sonar-scanner" \
                         -Dsonar.projectKey=COURSE-PERFORMANCE-DASHBOARD \
                         -Dsonar.projectName=COURSE-PERFORMANCE-DASHBOARD \
                         -Dsonar.sources=src \
                         -Dsonar.exclusions=**/node_modules/**,**/dist/** \
                         -Dsonar.javascript.lcov.reportPaths=coverage/**/lcov.info
-                    """
+                    '''
                 }
             }
         }
@@ -161,7 +161,9 @@ pipeline {
 
                 echo 'Creating Angular npm artifact...'
 
-                sh 'npm pack'
+                sh '''
+                    npm pack
+                '''
 
 
                 echo 'Uploading Angular artifact to Nexus...'
@@ -182,7 +184,7 @@ pipeline {
                     sh '''
                         ARTIFACT=$(ls *.tgz | head -n 1)
 
-                        echo "Uploading artifact: $ARTIFACT"
+                        echo "Artifact: $ARTIFACT"
 
                         curl -f -u "$NEXUS_USERNAME:$NEXUS_PASSWORD" \
                         --upload-file "$ARTIFACT" \
@@ -202,7 +204,9 @@ pipeline {
 
                 echo 'Building Angular application...'
 
-                sh 'npm run build'
+                sh '''
+                    npm run build
+                '''
             }
         }
 
@@ -216,17 +220,17 @@ pipeline {
 
                 echo 'Building Docker image...'
 
-                sh """
+                sh '''
                     docker build \
-                    -t ${DOCKER_IMAGE} \
+                    -t "$DOCKER_IMAGE" \
                     -f Dockerfile .
-                """
+                '''
             }
         }
 
 
         // =========================================================
-        // 9. Push Docker Image to Docker Hub
+        // 9. Push Image to Docker Hub
         // =========================================================
         stage('Push Image to Docker Hub') {
 
@@ -253,8 +257,6 @@ pipeline {
                         --password-stdin
 
                         docker push "$DOCKER_IMAGE"
-
-                        docker logout
                     '''
                 }
             }
@@ -271,11 +273,13 @@ pipeline {
                 echo 'Connecting Jenkins server to EKS cluster...'
 
                 sh '''
+                    aws --version
 
                     aws eks update-kubeconfig \
                     --region "$AWS_REGION" \
                     --name "$EKS_CLUSTER"
 
+                    kubectl config current-context
                 '''
             }
         }
@@ -291,13 +295,11 @@ pipeline {
                 echo 'Deploying Angular application to Kubernetes...'
 
                 sh '''
-
                     kubectl apply -f k8s/namespace.yaml
 
                     kubectl apply -f k8s/deployment.yaml
 
                     kubectl apply -f k8s/service.yaml
-
                 '''
             }
         }
@@ -313,31 +315,21 @@ pipeline {
                 echo 'Checking Kubernetes deployment...'
 
                 sh '''
-
-                    echo "=============================================="
-                    echo "Kubernetes Nodes"
-                    echo "=============================================="
+                    echo "===== Kubernetes Nodes ====="
 
                     kubectl get nodes
 
-                    echo "=============================================="
-                    echo "Application Pods"
-                    echo "=============================================="
+                    echo "===== Pods ====="
 
                     kubectl get pods -n course-dashboard
 
-                    echo "=============================================="
-                    echo "Deployment"
-                    echo "=============================================="
+                    echo "===== Deployment ====="
 
                     kubectl get deployment -n course-dashboard
 
-                    echo "=============================================="
-                    echo "Service"
-                    echo "=============================================="
+                    echo "===== Service ====="
 
                     kubectl get service -n course-dashboard
-
                 '''
             }
         }

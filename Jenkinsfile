@@ -38,7 +38,6 @@ pipeline {
     }
 
     stages {
-
         // =========================================================
         // 1. Git Checkout
         // =========================================================
@@ -122,12 +121,12 @@ pipeline {
                 '--scan . ' +
                 '--format XML ' +
                 '--format HTML ' +
-                '--nvdDatafeed https://dependency-check.github.io/DependencyCheck_Builder/nvd_cache/nvdcve-{0}.json.gz',
+                '--noupdate ' +
+                '--data /var/lib/jenkins/dependency-check-data',
             odcInstallation: 'DC'
         )
             }
         }
-
         // =========================================================
         // 6. Deploy Angular Artifact to Nexus
         // =========================================================

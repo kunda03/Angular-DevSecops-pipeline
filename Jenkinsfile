@@ -34,7 +34,7 @@ pipeline {
         // =========================================================
         // Nexus Configuration
         // =========================================================
-        NEXUS_URL = 'http://44.201.199.252:8081'
+        NEXUS_URL = 'http://44.201.199.252:8081/repository/npm-hosted'
 
         NEXUS_REPOSITORY = 'npm-hosted'
     }

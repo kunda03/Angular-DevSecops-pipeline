@@ -2,60 +2,53 @@ pipeline {
 
     agent any
 
-    options {
-        skipDefaultCheckout(true)
-        timestamps()
-    }
-
     environment {
 
-        // =========================================================
-        // SonarQube
-        // =========================================================
-        SCANNER_HOME = tool 'sonar-scanner'
-
-        // =========================================================
-        // Chrome
-        // =========================================================
-        CHROME_BIN = '/usr/bin/google-chrome'
-
-        // =========================================================
         // Docker
-        // =========================================================
         DOCKER_IMAGE = 'kundatoke03/course-performance-dashboard:latest'
 
-        // =========================================================
-        // AWS EKS
-        // =========================================================
-        EKS_CLUSTER = 'course-devsecops-cluster'
-        AWS_REGION = 'us-east-1'
-
-        // =========================================================
         // Nexus
-        // =========================================================
         NEXUS_URL = 'http://44.201.199.252:8081'
         NEXUS_REPOSITORY = 'npm-hosted'
+
+        // Kubernetes Infrastructure Repository
+        K8S_REPO = 'https://github.com/kunda03/Course-DevSecOps-K8s-Infra.git'
+        K8S_BRANCH = 'dev'
+
+        // Kubernetes
+        K8S_NAMESPACE = 'course-dashboard'
+        K8S_DEPLOYMENT = 'course-dashboard'
     }
 
     stages {
 
-        // =========================================================
-        // 1. Git Checkout
-        // =========================================================
-        stage('Git Checkout') {
+        // ============================================================
+        // 1. CHECKOUT
+        // ============================================================
+
+        stage('Checkout') {
 
             steps {
 
-                echo 'Checking out source code from GitHub...'
+                echo 'Checking out application source code...'
 
                 checkout scm
+
+                sh '''
+                    echo "Current directory:"
+                    pwd
+
+                    echo "Application files:"
+                    ls -la
+                '''
             }
         }
 
 
-        // =========================================================
-        // 2. Install Dependencies
-        // =========================================================
+        // ============================================================
+        // 2. INSTALL DEPENDENCIES
+        // ============================================================
+
         stage('Install Dependencies') {
 
             steps {
@@ -63,162 +56,147 @@ pipeline {
                 echo 'Installing Angular dependencies...'
 
                 sh '''
+                    set -e
+
                     node --version
                     npm --version
+
                     npm ci
+
+                    echo "Dependencies installed successfully!"
                 '''
             }
         }
 
 
-        // =========================================================
-        // 3. Unit Tests
-        // =========================================================
-        stage('Unit Tests') {
+        // ============================================================
+        // 3. TEST
+        // ============================================================
+
+        stage('Test') {
 
             steps {
-
-                echo 'Checking Google Chrome installation...'
-
-                sh '''
-                    echo "CHROME_BIN=$CHROME_BIN"
-                    which google-chrome
-                    google-chrome --version
-                '''
 
                 echo 'Running Angular unit tests...'
 
                 sh '''
-                    export CHROME_BIN=/usr/bin/google-chrome
+                    set -e
 
-                    npm test -- \
-                        --watch=false \
-                        --browsers=ChromeHeadless
+                    npm test -- --watch=false --browsers=ChromeHeadless
+
+                    echo "Unit tests completed successfully!"
                 '''
             }
         }
 
 
-        // =========================================================
-        // 4. SonarQube Analysis
-        // =========================================================
+        // ============================================================
+        // 4. SONARQUBE ANALYSIS
+        // ============================================================
+
         stage('SonarQube Analysis') {
 
             steps {
 
                 echo 'Running SonarQube analysis...'
 
-                withSonarQubeEnv('sonarqube') {
+                withSonarQubeEnv('SonarQube') {
 
-                    sh """
-                        ${SCANNER_HOME}/bin/sonar-scanner \
-                        -Dsonar.projectKey=COURSE-PERFORMANCE-DASHBOARD \
-                        -Dsonar.projectName=COURSE-PERFORMANCE-DASHBOARD \
-                        -Dsonar.sources=src \
-                        -Dsonar.exclusions=**/node_modules/**,**/dist/** \
-                        -Dsonar.javascript.lcov.reportPaths=coverage/**/lcov.info
-                    """
+                    sh '''
+                        set -e
+
+                        sonar-scanner \
+                          -Dsonar.projectKey=course-performance-dashboard \
+                          -Dsonar.projectName=course-performance-dashboard \
+                          -Dsonar.sources=src \
+                          -Dsonar.host.url="$SONAR_HOST_URL" \
+                          -Dsonar.token="$SONAR_AUTH_TOKEN"
+
+                        echo "SonarQube analysis completed!"
+                    '''
                 }
             }
         }
 
 
-        // =========================================================
-        // 5. OWASP Dependency Check
-        // =========================================================
+        // ============================================================
+        // 5. OWASP DEPENDENCY CHECK
+        // ============================================================
+
         stage('OWASP Dependency Check') {
 
             steps {
 
-                echo 'Scanning Angular dependencies for vulnerabilities...'
+                echo 'Running OWASP Dependency Check...'
 
-                dependencyCheck(
+                sh '''
+                    set -e
 
-                    additionalArguments:
-                        '--scan package.json ' +
-                        '--scan package-lock.json ' +
-                        '--noupdate ' +
-                        '--data /var/lib/jenkins/dependency-check-data ' +
-                        '--format HTML ' +
-                        '--format XML ' +
-                        '--failOnCVSS 11',
+                    dependency-check \
+                      --project "Course Performance Dashboard" \
+                      --scan . \
+                      --format HTML \
+                      --format XML \
+                      --out .
 
-                    odcInstallation: 'DC'
-                )
+                    echo "OWASP Dependency Check completed!"
+                '''
             }
         }
 
 
-        // =========================================================
-        // 6. Deploy Angular Artifact to Nexus
-        // =========================================================
-        stage('Deploy to Nexus') {
+        // ============================================================
+        // 6. NEXUS REPOSITORY
+        // ============================================================
 
-    steps {
+        stage('Nexus Repository') {
 
-        echo 'Publishing Angular npm artifact to Nexus...'
+            steps {
 
-        withCredentials([
-            usernamePassword(
-                credentialsId: 'nexus-credentials',
-                usernameVariable: 'NEXUS_USERNAME',
-                passwordVariable: 'NEXUS_PASSWORD'
-            )
-        ]) {
+                echo 'Publishing Angular npm artifact to Nexus...'
 
-            sh '''
-                set -e
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'nexus-credentials',
+                        usernameVariable: 'NEXUS_USERNAME',
+                        passwordVariable: 'NEXUS_PASSWORD'
+                    )
+                ]) {
 
-                echo "=============================================="
-                echo "Creating unique npm version..."
-                echo "=============================================="
+                    sh '''
+                        set -e
 
-                BASE_VERSION=$(node -p "require('./package.json').version")
+                        echo "Creating npm artifact..."
 
-                UNIQUE_VERSION="${BASE_VERSION}-${BUILD_NUMBER}"
+                        npm pack
 
-                echo "Base version: ${BASE_VERSION}"
-                echo "Publishing version: ${UNIQUE_VERSION}"
+                        PACKAGE_FILE=$(ls -t course-performance-dashboard-*.tgz | head -1)
 
-                npm version "${UNIQUE_VERSION}" --no-git-tag-version
+                        echo "Package created:"
+                        echo "$PACKAGE_FILE"
 
-                echo "=============================================="
-                echo "Creating npm artifact..."
-                echo "=============================================="
+                        echo "Publishing package to Nexus..."
 
-                rm -f *.tgz
+                        NEXUS_REGISTRY="${NEXUS_URL}/repository/${NEXUS_REPOSITORY}/"
 
-                ARTIFACT=$(npm pack)
+                        AUTH_TOKEN=$(printf '%s' "$NEXUS_USERNAME:$NEXUS_PASSWORD" | base64 -w 0)
 
-                echo "Created artifact: ${ARTIFACT}"
+                        npm publish "$PACKAGE_FILE" \
+                            --registry="$NEXUS_REGISTRY" \
+                            --//44.201.199.252:8081/repository/npm-hosted/:_auth="$AUTH_TOKEN" \
+                            --//44.201.199.252:8081/repository/npm-hosted/:always-auth=true
 
-                echo "=============================================="
-                echo "Publishing package to Nexus..."
-                echo "=============================================="
-
-                NEXUS_REGISTRY="${NEXUS_URL}/repository/${NEXUS_REPOSITORY}/"
-
-                AUTH_TOKEN=$(printf '%s' "$NEXUS_USERNAME:$NEXUS_PASSWORD" | base64 -w 0)
-
-                npm publish "${ARTIFACT}" \
-                    --registry="$NEXUS_REGISTRY" \
-                    --//44.201.199.252:8081/repository/npm-hosted/:_auth="$AUTH_TOKEN" \
-                    --//44.201.199.252:8081/repository/npm-hosted/:always-auth=true
-
-                echo "=============================================="
-                echo "Artifact successfully published to Nexus!"
-                echo "Version: ${UNIQUE_VERSION}"
-                echo "Artifact: ${ARTIFACT}"
-                echo "=============================================="
-            '''
+                        echo "Artifact successfully published to Nexus!"
+                    '''
+                }
+            }
         }
-    }
-}
 
 
-        // =========================================================
-        // 7. Angular Build
-        // =========================================================
+        // ============================================================
+        // 7. ANGULAR BUILD
+        // ============================================================
+
         stage('Angular Build') {
 
             steps {
@@ -226,125 +204,193 @@ pipeline {
                 echo 'Building Angular application...'
 
                 sh '''
+                    set -e
+
                     npm run build
+
+                    echo "Angular build completed!"
+
+                    echo "Build output:"
+                    find dist -maxdepth 3 -type f | head -30
                 '''
             }
         }
 
 
-        // =========================================================
-        // 8. Build Docker Image
-        // =========================================================
-        stage('Build Docker Image') {
+        // ============================================================
+        // 8. DOCKER BUILD
+        // ============================================================
+
+        stage('Docker Build') {
 
             steps {
 
                 echo 'Building Docker image...'
 
                 sh '''
+                    set -e
+
+                    echo "Docker version:"
+                    docker --version
+
+                    echo "Building image:"
+                    echo "$DOCKER_IMAGE"
+
                     docker build \
                         -t "$DOCKER_IMAGE" \
                         -f docker/Dockerfile .
+
+                    echo "Docker image built successfully!"
+
+                    docker images "$DOCKER_IMAGE"
                 '''
             }
         }
 
 
-        // =========================================================
-        // 9. Push Image to Docker Hub
-        // =========================================================
-        stage('Push Image to Docker Hub') {
+        // ============================================================
+        // 9. DOCKERHUB LOGIN
+        // ============================================================
+
+        stage('DockerHub Login') {
 
             steps {
 
-                echo 'Logging in to Docker Hub...'
+                echo 'Logging into Docker Hub...'
 
                 withCredentials([
-
                     usernamePassword(
-                        credentialsId: 'dockerhub-pwd',
-                        usernameVariable: 'DOCKERHUB_USERNAME',
-                        passwordVariable: 'DOCKERHUB_PASSWORD'
+                        credentialsId: 'dockerhub-credentials',
+                        usernameVariable: 'DOCKER_USERNAME',
+                        passwordVariable: 'DOCKER_PASSWORD'
                     )
-
                 ]) {
 
                     sh '''
-                        echo "$DOCKERHUB_PASSWORD" | \
-                        docker login \
-                            --username "$DOCKERHUB_USERNAME" \
-                            --password-stdin
-                    '''
+                        set -e
 
-                    sh '''
-                        docker push "$DOCKER_IMAGE"
+                        echo "$DOCKER_PASSWORD" | docker login \
+                            -u "$DOCKER_USERNAME" \
+                            --password-stdin
+
+                        echo "Docker Hub login successful!"
                     '''
                 }
             }
         }
 
 
-        // =========================================================
-        // 10. Configure EKS
-        // =========================================================
-        stage('Configure EKS') {
+        // ============================================================
+        // 10. PUSH IMAGE TO DOCKERHUB
+        // ============================================================
+
+        stage('Push Image to DockerHub') {
 
             steps {
 
-                echo 'Connecting Jenkins server to EKS cluster...'
+                echo 'Pushing Docker image to Docker Hub...'
 
                 sh '''
-                    aws --version
+                    set -e
 
-                    aws eks update-kubeconfig \
-                        --region "$AWS_REGION" \
-                        --name "$EKS_CLUSTER"
+                    echo "Pushing:"
+                    echo "$DOCKER_IMAGE"
+
+                    docker push "$DOCKER_IMAGE"
+
+                    echo "Docker image pushed successfully!"
                 '''
             }
         }
 
 
-        // =========================================================
-        // 11. Deploy to Kubernetes
-        // =========================================================
+        // ============================================================
+        // 11. CONNECT TO EKS
+        // ============================================================
+
+        stage('Connect to EKS') {
+
+            steps {
+
+                echo 'Connecting Jenkins to EKS cluster...'
+
+                sh '''
+                    set -e
+
+                    echo "AWS version:"
+                    aws --version
+
+                    echo "Updating kubeconfig..."
+
+                    aws eks update-kubeconfig \
+                        --region "${AWS_REGION}" \
+                        --name "${EKS_CLUSTER_NAME}"
+
+                    echo "Testing Kubernetes connection..."
+
+                    kubectl get nodes
+
+                    echo "EKS connection successful!"
+                '''
+            }
+        }
+
+
+        // ============================================================
+        // 12. DEPLOY TO KUBERNETES
+        // ============================================================
+
         stage('Deploy to Kubernetes') {
 
-    steps {
+            steps {
 
-        echo 'Deploying Angular application to Kubernetes...'
+                echo 'Deploying Angular application to Kubernetes...'
 
-        sh '''
-            set -e
+                sh '''
+                    set -e
 
-            echo "Cloning Kubernetes infrastructure repository..."
+                    echo "Cloning Kubernetes infrastructure repository..."
 
-            rm -rf k8s-infra
+                    rm -rf k8s-infra
 
-            git clone -b dev https://github.com/kunda03/Course-DevSecOps-K8s-Infra.git k8s-infra
+                    git clone \
+                        -b "$K8S_BRANCH" \
+                        "$K8S_REPO" \
+                        k8s-infra
 
-            echo "Kubernetes files:"
-            find k8s-infra/k8s -maxdepth 1 -type f -print
+                    echo "Kubernetes files:"
+                    find k8s-infra/k8s -maxdepth 1 -type f -print
 
-            echo "Applying Kubernetes namespace..."
+                    echo "Applying Kubernetes namespace..."
 
-            kubectl apply -f k8s-infra/k8s/namespace.yaml
+                    kubectl apply \
+                        -f k8s-infra/k8s/namespace.yaml
 
-            echo "Applying Kubernetes deployment..."
+                    echo "Applying Kubernetes deployment..."
 
-            kubectl apply -f k8s-infra/k8s/deployment.yaml
+                    kubectl apply \
+                        -f k8s-infra/k8s/deployment.yaml
 
-            echo "Applying Kubernetes service..."
+                    echo "Applying Kubernetes service..."
 
-            kubectl apply -f k8s-infra/k8s/service.yaml
+                    kubectl apply \
+                        -f k8s-infra/k8s/service.yaml
 
-            echo "Kubernetes resources applied successfully!"
-        '''
-    }
-}
+                    echo "Kubernetes resources applied successfully!"
 
-        // =========================================================
-        // 12. Verify Deployment
-        // =========================================================
+                    echo "Current resources:"
+
+                    kubectl get all \
+                        -n "$K8S_NAMESPACE"
+                '''
+            }
+        }
+
+
+        // ============================================================
+        // 13. VERIFY DEPLOYMENT
+        // ============================================================
+
         stage('Verify Deployment') {
 
             steps {
@@ -352,22 +398,60 @@ pipeline {
                 echo 'Verifying Kubernetes deployment...'
 
                 sh '''
-                    kubectl get pods -n dev
-                    kubectl get svc -n dev
+                    set -e
+
+                    echo "Checking namespace..."
+
+                    kubectl get namespace "$K8S_NAMESPACE"
+
+                    echo "Checking pods..."
+
+                    kubectl get pods \
+                        -n "$K8S_NAMESPACE" \
+                        -o wide
+
+                    echo "Checking services..."
+
+                    kubectl get svc \
+                        -n "$K8S_NAMESPACE"
+
+                    echo "Checking deployment..."
+
+                    kubectl get deployment "$K8S_DEPLOYMENT" \
+                        -n "$K8S_NAMESPACE"
+
+                    echo "Waiting for deployment rollout..."
 
                     kubectl rollout status \
-                        deployment/course-performance-dashboard \
-                        -n dev \
+                        deployment/"$K8S_DEPLOYMENT" \
+                        -n "$K8S_NAMESPACE" \
                         --timeout=120s
+
+                    echo "Final pod status..."
+
+                    kubectl get pods \
+                        -n "$K8S_NAMESPACE"
+
+                    echo "Final service status..."
+
+                    kubectl get svc \
+                        -n "$K8S_NAMESPACE"
+
+                    echo "=============================================="
+                    echo "Kubernetes deployment successful!"
+                    echo "Namespace : $K8S_NAMESPACE"
+                    echo "Deployment: $K8S_DEPLOYMENT"
+                    echo "=============================================="
                 '''
             }
         }
     }
 
 
-    // =============================================================
+    // ================================================================
     // POST ACTIONS
-    // =============================================================
+    // ================================================================
+
     post {
 
         always {

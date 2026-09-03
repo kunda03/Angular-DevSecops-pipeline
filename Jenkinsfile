@@ -28,8 +28,6 @@ pipeline {
 
         AWS_REGION = 'us-east-1'
 
-        CHROME_BIN = '/usr/bin/google-chrome'
-
 
         // =========================================================
         // Nexus Configuration
@@ -79,8 +77,9 @@ pipeline {
                 echo 'Running Angular unit tests...'
 
                 sh '''
-                    export CHROME_BIN=/usr/bin/google-chrome
-                    npm test -- --watch=false --browsers=ChromeHeadless
+                    npm test -- \
+                    --watch=false \
+                    --browsers=ChromeHeadless
                 '''
             }
         }
@@ -160,13 +159,11 @@ pipeline {
                 ]) {
 
                     sh '''
-
                         ARTIFACT=$(ls *.tgz | head -n 1)
 
                         curl -u "$NEXUS_USERNAME:$NEXUS_PASSWORD" \
                         --upload-file "$ARTIFACT" \
                         "$NEXUS_URL/repository/$NEXUS_REPOSITORY/$ARTIFACT"
-
                     '''
                 }
             }
@@ -228,11 +225,9 @@ pipeline {
                 ]) {
 
                     sh '''
-
                         echo "$DOCKERHUB_PASSWORD" | docker login \
                         --username "$DOCKERHUB_USERNAME" \
                         --password-stdin
-
                     '''
 
                     sh 'docker push ${DOCKER_IMAGE}'
@@ -271,13 +266,11 @@ pipeline {
                 echo 'Deploying Angular application to Kubernetes...'
 
                 sh '''
-
                     kubectl apply -f k8s/namespace.yaml
 
                     kubectl apply -f k8s/deployment.yaml
 
                     kubectl apply -f k8s/service.yaml
-
                 '''
             }
         }
@@ -293,7 +286,6 @@ pipeline {
                 echo 'Checking Kubernetes deployment...'
 
                 sh '''
-
                     kubectl get nodes
 
                     kubectl get pods -n course-dashboard
@@ -301,7 +293,6 @@ pipeline {
                     kubectl get deployment -n course-dashboard
 
                     kubectl get service -n course-dashboard
-
                 '''
             }
         }

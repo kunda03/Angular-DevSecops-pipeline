@@ -154,43 +154,66 @@ pipeline {
         // =========================================================
         stage('Deploy to Nexus') {
 
-            steps {
+    steps {
 
-                echo 'Publishing Angular npm artifact to Nexus...'
+        echo 'Publishing Angular npm artifact to Nexus...'
 
-                withCredentials([
-                    usernamePassword(
-                        credentialsId: 'nexus-credentials',
-                        usernameVariable: 'NEXUS_USERNAME',
-                        passwordVariable: 'NEXUS_PASSWORD'
-                    )
-                ]) {
+        withCredentials([
+            usernamePassword(
+                credentialsId: 'nexus-credentials',
+                usernameVariable: 'NEXUS_USERNAME',
+                passwordVariable: 'NEXUS_PASSWORD'
+            )
+        ]) {
 
-                    sh '''
-                        set -e
+            sh '''
+                set -e
 
-                        echo "Creating npm artifact..."
+                echo "=============================================="
+                echo "Creating unique npm version..."
+                echo "=============================================="
 
-                        rm -f course-performance-dashboard-0.0.0.tgz
+                BASE_VERSION=$(node -p "require('./package.json').version")
 
-                        npm pack
+                UNIQUE_VERSION="${BASE_VERSION}-${BUILD_NUMBER}"
 
-                        echo "Publishing package to Nexus..."
+                echo "Base version: ${BASE_VERSION}"
+                echo "Publishing version: ${UNIQUE_VERSION}"
 
-                        NEXUS_REGISTRY="${NEXUS_URL}/repository/${NEXUS_REPOSITORY}/"
+                npm version "${UNIQUE_VERSION}" --no-git-tag-version
 
-                        AUTH_TOKEN=$(printf '%s' "$NEXUS_USERNAME:$NEXUS_PASSWORD" | base64 -w 0)
+                echo "=============================================="
+                echo "Creating npm artifact..."
+                echo "=============================================="
 
-                        npm publish course-performance-dashboard-0.0.0.tgz \
-                            --registry="$NEXUS_REGISTRY" \
-                            --//44.201.199.252:8081/repository/npm-hosted/:_auth="$AUTH_TOKEN" \
-                            --//44.201.199.252:8081/repository/npm-hosted/:always-auth=true
+                rm -f *.tgz
 
-                        echo "Artifact successfully published to Nexus!"
-                    '''
-                }
-            }
+                ARTIFACT=$(npm pack)
+
+                echo "Created artifact: ${ARTIFACT}"
+
+                echo "=============================================="
+                echo "Publishing package to Nexus..."
+                echo "=============================================="
+
+                NEXUS_REGISTRY="${NEXUS_URL}/repository/${NEXUS_REPOSITORY}/"
+
+                AUTH_TOKEN=$(printf '%s' "$NEXUS_USERNAME:$NEXUS_PASSWORD" | base64 -w 0)
+
+                npm publish "${ARTIFACT}" \
+                    --registry="$NEXUS_REGISTRY" \
+                    --//44.201.199.252:8081/repository/npm-hosted/:_auth="$AUTH_TOKEN" \
+                    --//44.201.199.252:8081/repository/npm-hosted/:always-auth=true
+
+                echo "=============================================="
+                echo "Artifact successfully published to Nexus!"
+                echo "Version: ${UNIQUE_VERSION}"
+                echo "Artifact: ${ARTIFACT}"
+                echo "=============================================="
+            '''
         }
+    }
+}
 
 
         // =========================================================

@@ -76,10 +76,30 @@ pipeline {
 
             steps {
 
-                echo 'Running Angular unit tests...'
+                echo 'Checking Chrome installation...'
 
                 sh '''
+                    echo "=============================================="
+                    echo "Chrome Environment Check"
+                    echo "=============================================="
+
+                    echo "CHROME_BIN=$CHROME_BIN"
+
+                    echo "Checking google-chrome location..."
+                    which google-chrome
+
+                    echo "Checking Chrome binary..."
+                    ls -l /usr/bin/google-chrome
+
+                    echo "Checking Chrome version..."
+                    google-chrome --version
+
+                    echo "=============================================="
+                    echo "Running Angular unit tests..."
+                    echo "=============================================="
+
                     export CHROME_BIN=/usr/bin/google-chrome
+
                     npm test -- --watch=false --browsers=ChromeHeadless
                 '''
             }
@@ -160,13 +180,13 @@ pipeline {
                 ]) {
 
                     sh '''
-
                         ARTIFACT=$(ls *.tgz | head -n 1)
 
-                        curl -u "$NEXUS_USERNAME:$NEXUS_PASSWORD" \
+                        echo "Uploading artifact: $ARTIFACT"
+
+                        curl -f -u "$NEXUS_USERNAME:$NEXUS_PASSWORD" \
                         --upload-file "$ARTIFACT" \
                         "$NEXUS_URL/repository/$NEXUS_REPOSITORY/$ARTIFACT"
-
                     '''
                 }
             }
@@ -228,14 +248,14 @@ pipeline {
                 ]) {
 
                     sh '''
-
                         echo "$DOCKERHUB_PASSWORD" | docker login \
                         --username "$DOCKERHUB_USERNAME" \
                         --password-stdin
 
-                    '''
+                        docker push "$DOCKER_IMAGE"
 
-                    sh 'docker push ${DOCKER_IMAGE}'
+                        docker logout
+                    '''
                 }
             }
         }
@@ -294,11 +314,27 @@ pipeline {
 
                 sh '''
 
+                    echo "=============================================="
+                    echo "Kubernetes Nodes"
+                    echo "=============================================="
+
                     kubectl get nodes
+
+                    echo "=============================================="
+                    echo "Application Pods"
+                    echo "=============================================="
 
                     kubectl get pods -n course-dashboard
 
+                    echo "=============================================="
+                    echo "Deployment"
+                    echo "=============================================="
+
                     kubectl get deployment -n course-dashboard
+
+                    echo "=============================================="
+                    echo "Service"
+                    echo "=============================================="
 
                     kubectl get service -n course-dashboard
 

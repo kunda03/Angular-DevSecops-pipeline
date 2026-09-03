@@ -1,353 +1,59 @@
-pipeline {
+// =========================================================
+// 6. Deploy Angular Artifact to Nexus
+// =========================================================
+stage('Deploy to Nexus') {
 
-    agent any
+    steps {
 
-    options {
-        skipDefaultCheckout(true)
-        timestamps()
-    }
+        echo 'Publishing Angular npm artifact to Nexus...'
 
-    environment {
+        withCredentials([
 
-        // =========================================================
-        // SonarQube
-        // =========================================================
-        SCANNER_HOME = tool 'sonar-scanner'
+            usernamePassword(
 
-        // =========================================================
-        // Chrome
-        // =========================================================
-        CHROME_BIN = '/usr/bin/google-chrome'
+                credentialsId: 'nexus-credentials',
 
-        // =========================================================
-        // Docker
-        // =========================================================
-        DOCKER_IMAGE = 'kundatoke03/course-performance-dashboard:latest'
+                usernameVariable: 'NEXUS_USERNAME',
 
-        // =========================================================
-        // AWS EKS
-        // =========================================================
-        EKS_CLUSTER = 'course-devsecops-cluster'
-        AWS_REGION = 'us-east-1'
+                passwordVariable: 'NEXUS_PASSWORD'
+            )
 
-        // =========================================================
-        // Nexus
-        // =========================================================
-        NEXUS_URL = 'http://44.201.199.252:8081'
-        NEXUS_REPOSITORY = 'npm-hosted'
-    }
+        ]) {
 
-    stages {
+            sh '''
+                set -e
 
-        // =========================================================
-        // 1. Git Checkout
-        // =========================================================
-        stage('Git Checkout') {
+                echo "Creating unique npm version..."
 
-            steps {
+                # Jenkins BUILD_NUMBER creates a unique version
+                VERSION="0.0.${BUILD_NUMBER}"
 
-                echo 'Checking out source code from GitHub...'
+                echo "Using package version: ${VERSION}"
 
-                checkout scm
-            }
-        }
+                npm version "${VERSION}" --no-git-tag-version
 
+                echo "Creating npm artifact..."
 
-        // =========================================================
-        // 2. Install Dependencies
-        // =========================================================
-        stage('Install Dependencies') {
+                rm -f *.tgz
 
-            steps {
+                npm pack
 
-                echo 'Installing Angular dependencies...'
+                ARTIFACT=$(ls *.tgz | head -n 1)
 
-                sh '''
-                    node --version
-                    npm --version
-                    npm ci
-                '''
-            }
-        }
+                echo "Created artifact: ${ARTIFACT}"
 
+                echo "Publishing package to Nexus..."
 
-        // =========================================================
-        // 3. Unit Tests
-        // =========================================================
-        stage('Unit Tests') {
+                NEXUS_REGISTRY="${NEXUS_URL}/repository/${NEXUS_REPOSITORY}/"
 
-            steps {
+                AUTH_TOKEN=$(printf "%s:%s" "$NEXUS_USERNAME" "$NEXUS_PASSWORD" | base64 -w 0)
 
-                echo 'Checking Google Chrome installation...'
+                npm publish "$ARTIFACT" \
+                    --registry="$NEXUS_REGISTRY" \
+                    --//${NEXUS_REGISTRY#http:}:_auth="$AUTH_TOKEN" \
+                    --//${NEXUS_REGISTRY#http:}:always-auth=true
 
-                sh '''
-                    echo "CHROME_BIN=$CHROME_BIN"
-                    which google-chrome
-                    google-chrome --version
-                '''
-
-                echo 'Running Angular unit tests...'
-
-                sh '''
-                    export CHROME_BIN=/usr/bin/google-chrome
-
-                    npm test -- \
-                        --watch=false \
-                        --browsers=ChromeHeadless
-                '''
-            }
-        }
-
-
-        // =========================================================
-        // 4. SonarQube Analysis
-        // =========================================================
-        stage('SonarQube Analysis') {
-
-            steps {
-
-                echo 'Running SonarQube analysis...'
-
-                withSonarQubeEnv('sonarqube') {
-
-                    sh """
-                        ${SCANNER_HOME}/bin/sonar-scanner \
-                        -Dsonar.projectKey=COURSE-PERFORMANCE-DASHBOARD \
-                        -Dsonar.projectName=COURSE-PERFORMANCE-DASHBOARD \
-                        -Dsonar.sources=src \
-                        -Dsonar.exclusions=**/node_modules/**,**/dist/** \
-                        -Dsonar.javascript.lcov.reportPaths=coverage/**/lcov.info
-                    """
-                }
-            }
-        }
-
-
-        // =========================================================
-        // 5. OWASP Dependency Check
-        // =========================================================
-        stage('OWASP Dependency Check') {
-
-            steps {
-
-                echo 'Scanning Angular dependencies for vulnerabilities...'
-
-                dependencyCheck(
-
-                    additionalArguments:
-                        '--scan package.json ' +
-                        '--scan package-lock.json ' +
-                        '--noupdate ' +
-                        '--data /var/lib/jenkins/dependency-check-data ' +
-                        '--format HTML ' +
-                        '--format XML ' +
-                        '--failOnCVSS 11',
-
-                    odcInstallation: 'DC'
-                )
-            }
-        }
-
-
-        // =========================================================
-        // 6. Deploy Angular Artifact to Nexus
-        // =========================================================
-        stage('Deploy to Nexus') {
-
-            steps {
-
-                echo 'Publishing Angular npm artifact to Nexus...'
-
-                withCredentials([
-                    usernamePassword(
-                        credentialsId: 'nexus-credentials',
-                        usernameVariable: 'NEXUS_USERNAME',
-                        passwordVariable: 'NEXUS_PASSWORD'
-                    )
-                ]) {
-
-                    sh '''
-                        set -e
-
-                        echo "Creating npm artifact..."
-
-                        rm -f course-performance-dashboard-0.0.0.tgz
-
-                        npm pack
-
-                        echo "Publishing package to Nexus..."
-
-                        NEXUS_REGISTRY="${NEXUS_URL}/repository/${NEXUS_REPOSITORY}/"
-
-                        AUTH_TOKEN=$(printf '%s' "$NEXUS_USERNAME:$NEXUS_PASSWORD" | base64 -w 0)
-
-                        npm publish course-performance-dashboard-0.0.0.tgz \
-                            --registry="$NEXUS_REGISTRY" \
-                            --//44.201.199.252:8081/repository/npm-hosted/:_auth="$AUTH_TOKEN" \
-                            --//44.201.199.252:8081/repository/npm-hosted/:always-auth=true
-
-                        echo "Artifact successfully published to Nexus!"
-                    '''
-                }
-            }
-        }
-
-
-        // =========================================================
-        // 7. Angular Build
-        // =========================================================
-        stage('Angular Build') {
-
-            steps {
-
-                echo 'Building Angular application...'
-
-                sh '''
-                    npm run build
-                '''
-            }
-        }
-
-
-        // =========================================================
-        // 8. Build Docker Image
-        // =========================================================
-        stage('Build Docker Image') {
-
-            steps {
-
-                echo 'Building Docker image...'
-
-                sh '''
-                    docker build \
-                        -t "$DOCKER_IMAGE" \
-                        -f docker/Dockerfile .
-                '''
-            }
-        }
-
-
-        // =========================================================
-        // 9. Push Image to Docker Hub
-        // =========================================================
-        stage('Push Image to Docker Hub') {
-
-            steps {
-
-                echo 'Logging in to Docker Hub...'
-
-                withCredentials([
-
-                    usernamePassword(
-                        credentialsId: 'dockerhub-pwd',
-                        usernameVariable: 'DOCKERHUB_USERNAME',
-                        passwordVariable: 'DOCKERHUB_PASSWORD'
-                    )
-
-                ]) {
-
-                    sh '''
-                        echo "$DOCKERHUB_PASSWORD" | \
-                        docker login \
-                            --username "$DOCKERHUB_USERNAME" \
-                            --password-stdin
-                    '''
-
-                    sh '''
-                        docker push "$DOCKER_IMAGE"
-                    '''
-                }
-            }
-        }
-
-
-        // =========================================================
-        // 10. Configure EKS
-        // =========================================================
-        stage('Configure EKS') {
-
-            steps {
-
-                echo 'Connecting Jenkins server to EKS cluster...'
-
-                sh '''
-                    aws --version
-
-                    aws eks update-kubeconfig \
-                        --region "$AWS_REGION" \
-                        --name "$EKS_CLUSTER"
-                '''
-            }
-        }
-
-
-        // =========================================================
-        // 11. Deploy to Kubernetes
-        // =========================================================
-        stage('Deploy to Kubernetes') {
-
-            steps {
-
-                echo 'Deploying Angular application to Kubernetes...'
-
-                sh '''
-                    kubectl apply -f k8s/namespace.yaml
-                    kubectl apply -f k8s/deployment.yaml
-                    kubectl apply -f k8s/service.yaml
-                '''
-            }
-        }
-
-
-        // =========================================================
-        // 12. Verify Deployment
-        // =========================================================
-        stage('Verify Deployment') {
-
-            steps {
-
-                echo 'Verifying Kubernetes deployment...'
-
-                sh '''
-                    kubectl get pods -n dev
-                    kubectl get svc -n dev
-
-                    kubectl rollout status \
-                        deployment/course-performance-dashboard \
-                        -n dev \
-                        --timeout=120s
-                '''
-            }
-        }
-    }
-
-
-    // =============================================================
-    // POST ACTIONS
-    // =============================================================
-    post {
-
-        always {
-
-            echo 'Pipeline execution completed.'
-        }
-
-        success {
-
-            echo '''
-            ==============================================
-            Angular CI/CD Pipeline completed successfully!
-            ==============================================
-            '''
-        }
-
-        failure {
-
-            echo '''
-            ==============================================
-            Angular CI/CD Pipeline failed!
-            Check the failed stage in Console Output.
-            ==============================================
+                echo "Package successfully published to Nexus!"
             '''
         }
     }

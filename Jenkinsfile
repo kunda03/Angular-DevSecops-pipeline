@@ -32,8 +32,6 @@ pipeline {
 
         // =========================================================
         // Nexus
-        // IMPORTANT:
-        // Do NOT put /repository/npm-hosted here
         // =========================================================
         NEXUS_URL = 'http://44.201.199.252:8081'
         NEXUS_REPOSITORY = 'npm-hosted'
@@ -155,39 +153,44 @@ pipeline {
         // 6. Deploy Angular Artifact to Nexus
         // =========================================================
         stage('Deploy to Nexus') {
-    steps {
-        echo 'Publishing Angular npm artifact to Nexus...'
 
-        withCredentials([
-            usernamePassword(
-                credentialsId: 'nexus-credentials',
-                usernameVariable: 'NEXUS_USERNAME',
-                passwordVariable: 'NEXUS_PASSWORD'
-            )
-        ]) {
-            sh '''
-                set -e
+            steps {
 
-                echo "Creating npm artifact..."
-                rm -f course-performance-dashboard-0.0.0.tgz
+                echo 'Publishing Angular npm artifact to Nexus...'
 
-                npm pack
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'nexus-credentials',
+                        usernameVariable: 'NEXUS_USERNAME',
+                        passwordVariable: 'NEXUS_PASSWORD'
+                    )
+                ]) {
 
-                echo "Configuring Nexus npm registry..."
-                npm config set registry http://44.201.199.252:8081/repository/npm-hosted/
+                    sh '''
+                        set -e
 
-                echo "Publishing package to Nexus..."
+                        echo "Creating npm artifact..."
 
-                npm publish course-performance-dashboard-0.0.0.tgz \
-                    --registry=http://44.201.199.252:8081/repository/npm-hosted/ \
-                    --//44.201.199.252:8081/repository/npm-hosted/:_auth="$(printf '%s' "$NEXUS_USERNAME:$NEXUS_PASSWORD" | base64 -w 0)" \
-                    --//44.201.199.252:8081/repository/npm-hosted/:always-auth=true
+                        rm -f course-performance-dashboard-0.0.0.tgz
 
-                echo "Artifact successfully published to Nexus!"
-            '''
+                        npm pack
+
+                        echo "Publishing package to Nexus..."
+
+                        NEXUS_REGISTRY="${NEXUS_URL}/repository/${NEXUS_REPOSITORY}/"
+
+                        AUTH_TOKEN=$(printf '%s' "$NEXUS_USERNAME:$NEXUS_PASSWORD" | base64 -w 0)
+
+                        npm publish course-performance-dashboard-0.0.0.tgz \
+                            --registry="$NEXUS_REGISTRY" \
+                            --//44.201.199.252:8081/repository/npm-hosted/:_auth="$AUTH_TOKEN" \
+                            --//44.201.199.252:8081/repository/npm-hosted/:always-auth=true
+
+                        echo "Artifact successfully published to Nexus!"
+                    '''
+                }
+            }
         }
-    }
-}
 
 
         // =========================================================
@@ -308,7 +311,11 @@ pipeline {
                 sh '''
                     kubectl get pods -n dev
                     kubectl get svc -n dev
-                    kubectl rollout status deployment/course-performance-dashboard -n dev --timeout=120s
+
+                    kubectl rollout status \
+                        deployment/course-performance-dashboard \
+                        -n dev \
+                        --timeout=120s
                 '''
             }
         }

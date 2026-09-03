@@ -10,36 +10,34 @@ pipeline {
     environment {
 
         // =========================================================
-        // SonarQube Scanner
+        // SonarQube
         // =========================================================
         SCANNER_HOME = tool 'sonar-scanner'
 
+        // =========================================================
+        // Chrome
+        // =========================================================
+        CHROME_BIN = '/usr/bin/google-chrome'
 
         // =========================================================
-        // Docker Image
+        // Docker
         // =========================================================
         DOCKER_IMAGE = 'kundatoke03/course-performance-dashboard:latest'
 
-
         // =========================================================
-        // AWS EKS Configuration
+        // AWS EKS
         // =========================================================
         EKS_CLUSTER = 'course-devsecops-cluster'
-
         AWS_REGION = 'us-east-1'
 
-
         // =========================================================
-        // Nexus Configuration
+        // Nexus
         // =========================================================
-        NEXUS_URL = 'http://44.201.199.252:8081/'
-
+        NEXUS_URL = 'http://44.201.199.252:8081'
         NEXUS_REPOSITORY = 'npm-hosted'
     }
 
-
     stages {
-
 
         // =========================================================
         // 1. Git Checkout
@@ -64,7 +62,11 @@ pipeline {
 
                 echo 'Installing Angular dependencies...'
 
-                sh 'npm ci'
+                sh '''
+                    node --version
+                    npm --version
+                    npm ci
+                '''
             }
         }
 
@@ -76,14 +78,22 @@ pipeline {
 
             steps {
 
+                echo 'Checking Google Chrome installation...'
+
+                sh '''
+                    echo "CHROME_BIN=$CHROME_BIN"
+                    which google-chrome
+                    google-chrome --version
+                '''
+
                 echo 'Running Angular unit tests...'
 
                 sh '''
                     export CHROME_BIN=/usr/bin/google-chrome
 
                     npm test -- \
-                    --watch=false \
-                    --browsers=ChromeHeadless
+                        --watch=false \
+                        --browsers=ChromeHeadless
                 '''
             }
         }
@@ -98,7 +108,7 @@ pipeline {
 
                 echo 'Running SonarQube analysis...'
 
-                withSonarQubeEnv('sonar-scanner') {
+                withSonarQubeEnv('sonarqube') {
 
                     sh """
                         ${SCANNER_HOME}/bin/sonar-scanner \
@@ -125,9 +135,13 @@ pipeline {
                 dependencyCheck(
 
                     additionalArguments:
-                        '--scan . ' +
+                        '--scan package.json ' +
+                        '--scan package-lock.json ' +
+                        '--noupdate ' +
+                        '--data /var/lib/jenkins/dependency-check-data ' +
+                        '--format HTML ' +
                         '--format XML ' +
-                        '--format HTML',
+                        '--failOnCVSS 11',
 
                     odcInstallation: 'DC'
                 )
@@ -145,63 +159,34 @@ pipeline {
                 echo 'Publishing Angular npm artifact to Nexus...'
 
                 withCredentials([
-
                     usernamePassword(
-
                         credentialsId: 'nexus-credentials',
-
                         usernameVariable: 'NEXUS_USERNAME',
-
                         passwordVariable: 'NEXUS_PASSWORD'
                     )
-
                 ]) {
 
                     sh '''
                         set -e
 
-                        echo "=============================================="
-                        echo "Creating unique npm package version..."
-                        echo "=============================================="
-
-                        VERSION="0.0.${BUILD_NUMBER}"
-
-                        echo "Using package version: ${VERSION}"
-
-                        npm version "${VERSION}" --no-git-tag-version
-
-                        echo "=============================================="
                         echo "Creating npm artifact..."
-                        echo "=============================================="
 
-                        rm -f *.tgz
+                        rm -f course-performance-dashboard-0.0.0.tgz
 
                         npm pack
 
-                        ARTIFACT=$(ls *.tgz | head -n 1)
-
-                        echo "Created artifact: ${ARTIFACT}"
-
-                        echo "=============================================="
                         echo "Publishing package to Nexus..."
-                        echo "=============================================="
 
                         NEXUS_REGISTRY="${NEXUS_URL}/repository/${NEXUS_REPOSITORY}/"
 
-                        AUTH_TOKEN=$(printf "%s:%s" \
-                            "$NEXUS_USERNAME" \
-                            "$NEXUS_PASSWORD" | base64 -w 0)
+                        AUTH_TOKEN=$(printf '%s' "$NEXUS_USERNAME:$NEXUS_PASSWORD" | base64 -w 0)
 
-                        npm publish "$ARTIFACT" \
+                        npm publish course-performance-dashboard-0.0.0.tgz \
                             --registry="$NEXUS_REGISTRY" \
-                            --//${NEXUS_REGISTRY#http:}:_auth="$AUTH_TOKEN" \
-                            --//${NEXUS_REGISTRY#http:}:always-auth=true
+                            --//44.201.199.252:8081/repository/npm-hosted/:_auth="$AUTH_TOKEN" \
+                            --//44.201.199.252:8081/repository/npm-hosted/:always-auth=true
 
-                        echo "=============================================="
-                        echo "Package successfully published to Nexus!"
-                        echo "Version: ${VERSION}"
-                        echo "Artifact: ${ARTIFACT}"
-                        echo "=============================================="
+                        echo "Artifact successfully published to Nexus!"
                     '''
                 }
             }
@@ -217,7 +202,9 @@ pipeline {
 
                 echo 'Building Angular application...'
 
-                sh 'npm run build'
+                sh '''
+                    npm run build
+                '''
             }
         }
 
@@ -231,11 +218,11 @@ pipeline {
 
                 echo 'Building Docker image...'
 
-                sh """
+                sh '''
                     docker build \
-                    -t ${DOCKER_IMAGE} \
-                    -f Dockerfile .
-                """
+                        -t "$DOCKER_IMAGE" \
+                        -f docker/Dockerfile .
+                '''
             }
         }
 
@@ -252,23 +239,23 @@ pipeline {
                 withCredentials([
 
                     usernamePassword(
-
                         credentialsId: 'dockerhub-pwd',
-
                         usernameVariable: 'DOCKERHUB_USERNAME',
-
                         passwordVariable: 'DOCKERHUB_PASSWORD'
                     )
 
                 ]) {
 
                     sh '''
-                        echo "$DOCKERHUB_PASSWORD" | docker login \
-                        --username "$DOCKERHUB_USERNAME" \
-                        --password-stdin
+                        echo "$DOCKERHUB_PASSWORD" | \
+                        docker login \
+                            --username "$DOCKERHUB_USERNAME" \
+                            --password-stdin
                     '''
 
-                    sh 'docker push ${DOCKER_IMAGE}'
+                    sh '''
+                        docker push "$DOCKER_IMAGE"
+                    '''
                 }
             }
         }
@@ -284,9 +271,11 @@ pipeline {
                 echo 'Connecting Jenkins server to EKS cluster...'
 
                 sh '''
+                    aws --version
+
                     aws eks update-kubeconfig \
-                    --region "$AWS_REGION" \
-                    --name "$EKS_CLUSTER"
+                        --region "$AWS_REGION" \
+                        --name "$EKS_CLUSTER"
                 '''
             }
         }
@@ -303,9 +292,7 @@ pipeline {
 
                 sh '''
                     kubectl apply -f k8s/namespace.yaml
-
                     kubectl apply -f k8s/deployment.yaml
-
                     kubectl apply -f k8s/service.yaml
                 '''
             }
@@ -319,16 +306,16 @@ pipeline {
 
             steps {
 
-                echo 'Checking Kubernetes deployment...'
+                echo 'Verifying Kubernetes deployment...'
 
                 sh '''
-                    kubectl get nodes
+                    kubectl get pods -n dev
+                    kubectl get svc -n dev
 
-                    kubectl get pods -n course-dashboard
-
-                    kubectl get deployment -n course-dashboard
-
-                    kubectl get service -n course-dashboard
+                    kubectl rollout status \
+                        deployment/course-performance-dashboard \
+                        -n dev \
+                        --timeout=120s
                 '''
             }
         }
@@ -340,33 +327,28 @@ pipeline {
     // =============================================================
     post {
 
-        success {
-
-            echo '=============================================='
-
-            echo 'Angular CI/CD Pipeline completed successfully!'
-
-            echo 'Application deployed to EKS.'
-
-            echo '=============================================='
-        }
-
-
-        failure {
-
-            echo '=============================================='
-
-            echo 'Angular CI/CD Pipeline failed!'
-
-            echo 'Check the failed stage in Console Output.'
-
-            echo '=============================================='
-        }
-
-
         always {
 
             echo 'Pipeline execution completed.'
+        }
+
+        success {
+
+            echo '''
+            ==============================================
+            Angular CI/CD Pipeline completed successfully!
+            ==============================================
+            '''
+        }
+
+        failure {
+
+            echo '''
+            ==============================================
+            Angular CI/CD Pipeline failed!
+            Check the failed stage in Console Output.
+            ==============================================
+            '''
         }
     }
 }

@@ -1,5 +1,4 @@
 pipeline {
-
     agent any
 
     options {
@@ -8,7 +7,6 @@ pipeline {
     }
 
     environment {
-
         // =========================================================
         // SonarQube
         // =========================================================
@@ -31,6 +29,12 @@ pipeline {
         AWS_REGION = 'us-east-1'
 
         // =========================================================
+        // Kubernetes
+        // =========================================================
+        K8S_NAMESPACE = 'course-dashboard'
+        K8S_DEPLOYMENT = 'course-dashboard'
+
+        // =========================================================
         // Nexus
         // =========================================================
         NEXUS_URL = 'http://44.201.199.252:8081'
@@ -38,28 +42,22 @@ pipeline {
     }
 
     stages {
-
         // =========================================================
         // 1. Git Checkout
         // =========================================================
         stage('Git Checkout') {
-
             steps {
-
                 echo 'Checking out source code from GitHub...'
 
                 checkout scm
             }
         }
 
-
         // =========================================================
         // 2. Install Dependencies
         // =========================================================
         stage('Install Dependencies') {
-
             steps {
-
                 echo 'Installing Angular dependencies...'
 
                 sh '''
@@ -70,14 +68,11 @@ pipeline {
             }
         }
 
-
         // =========================================================
         // 3. Unit Tests
         // =========================================================
         stage('Unit Tests') {
-
             steps {
-
                 echo 'Checking Google Chrome installation...'
 
                 sh '''
@@ -98,18 +93,14 @@ pipeline {
             }
         }
 
-
         // =========================================================
         // 4. SonarQube Analysis
         // =========================================================
         stage('SonarQube Analysis') {
-
             steps {
-
                 echo 'Running SonarQube analysis...'
 
                 withSonarQubeEnv('sonarqube') {
-
                     sh """
                         ${SCANNER_HOME}/bin/sonar-scanner \
                         -Dsonar.projectKey=COURSE-PERFORMANCE-DASHBOARD \
@@ -122,14 +113,11 @@ pipeline {
             }
         }
 
-
         // =========================================================
         // 5. OWASP Dependency Check
         // =========================================================
         stage('OWASP Dependency Check') {
-
             steps {
-
                 echo 'Scanning Angular dependencies for vulnerabilities...'
 
                 dependencyCheck(
@@ -148,25 +136,21 @@ pipeline {
             }
         }
 
-
         // =========================================================
         // 6. Deploy Angular Artifact to Nexus
         // =========================================================
         stage('Deploy to Nexus') {
+            steps {
+                echo 'Publishing Angular npm artifact to Nexus...'
 
-    steps {
-
-        echo 'Publishing Angular npm artifact to Nexus...'
-
-        withCredentials([
+                withCredentials([
             usernamePassword(
                 credentialsId: 'nexus-credentials',
                 usernameVariable: 'NEXUS_USERNAME',
                 passwordVariable: 'NEXUS_PASSWORD'
             )
         ]) {
-
-            sh '''
+                    sh '''
                 set -e
 
                 echo "=============================================="
@@ -212,17 +196,14 @@ pipeline {
                 echo "=============================================="
             '''
         }
-    }
-}
-
+            }
+        }
 
         // =========================================================
         // 7. Angular Build
         // =========================================================
         stage('Angular Build') {
-
             steps {
-
                 echo 'Building Angular application...'
 
                 sh '''
@@ -231,14 +212,11 @@ pipeline {
             }
         }
 
-
         // =========================================================
         // 8. Build Docker Image
         // =========================================================
         stage('Build Docker Image') {
-
             steps {
-
                 echo 'Building Docker image...'
 
                 sh '''
@@ -249,14 +227,11 @@ pipeline {
             }
         }
 
-
         // =========================================================
         // 9. Push Image to Docker Hub
         // =========================================================
         stage('Push Image to Docker Hub') {
-
             steps {
-
                 echo 'Logging in to Docker Hub...'
 
                 withCredentials([
@@ -268,7 +243,6 @@ pipeline {
                     )
 
                 ]) {
-
                     sh '''
                         echo "$DOCKERHUB_PASSWORD" | \
                         docker login \
@@ -283,14 +257,11 @@ pipeline {
             }
         }
 
-
         // =========================================================
         // 10. Configure EKS
         // =========================================================
         stage('Configure EKS') {
-
             steps {
-
                 echo 'Connecting Jenkins server to EKS cluster...'
 
                 sh '''
@@ -303,17 +274,14 @@ pipeline {
             }
         }
 
-
         // =========================================================
         // 11. Deploy to Kubernetes
         // =========================================================
         stage('Deploy to Kubernetes') {
+            steps {
+                echo 'Deploying Angular application to Kubernetes...'
 
-    steps {
-
-        echo 'Deploying Angular application to Kubernetes...'
-
-        sh '''
+                sh '''
             set -e
 
             echo "Cloning Kubernetes infrastructure repository..."
@@ -339,16 +307,14 @@ pipeline {
 
             echo "Kubernetes resources applied successfully!"
         '''
-    }
-}
+            }
+        }
 
         // =========================================================
         // 12. Verify Deployment
         // =========================================================
-         stage('Verify Deployment') {
-
+        stage('Verify Deployment') {
             steps {
-
                 echo 'Verifying Kubernetes deployment...'
 
                 sh '''
@@ -401,20 +367,15 @@ pipeline {
         }
     }
 
-
-
     // =============================================================
     // POST ACTIONS
     // =============================================================
     post {
-
         always {
-
             echo 'Pipeline execution completed.'
         }
 
         success {
-
             echo '''
             ==============================================
             Angular CI/CD Pipeline completed successfully!
@@ -423,7 +384,6 @@ pipeline {
         }
 
         failure {
-
             echo '''
             ==============================================
             Angular CI/CD Pipeline failed!

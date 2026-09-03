@@ -116,7 +116,7 @@ pipeline {
 
                 echo 'Running SonarQube analysis...'
 
-                withSonarQubeEnv('sonar-scanner') {
+                withSonarQubeEnv('sonarqube') {
 
                     sh """
                         ${SCANNER_HOME}/bin/sonar-scanner \

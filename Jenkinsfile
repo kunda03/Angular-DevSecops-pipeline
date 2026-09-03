@@ -155,41 +155,39 @@ pipeline {
         // 6. Deploy Angular Artifact to Nexus
         // =========================================================
         stage('Deploy to Nexus') {
+    steps {
+        echo 'Publishing Angular npm artifact to Nexus...'
 
-            steps {
+        withCredentials([
+            usernamePassword(
+                credentialsId: 'nexus-credentials',
+                usernameVariable: 'NEXUS_USERNAME',
+                passwordVariable: 'NEXUS_PASSWORD'
+            )
+        ]) {
+            sh '''
+                set -e
 
-                echo 'Creating Angular npm artifact...'
+                echo "Creating npm artifact..."
+                rm -f course-performance-dashboard-0.0.0.tgz
 
-                sh '''
-                    rm -f *.tgz
-                    npm pack
-                '''
+                npm pack
 
-                echo 'Uploading Angular artifact to Nexus...'
+                echo "Configuring Nexus npm registry..."
+                npm config set registry http://44.201.199.252:8081/repository/npm-hosted/
 
-                withCredentials([
+                echo "Publishing package to Nexus..."
 
-                    usernamePassword(
-                        credentialsId: 'nexus-credentials',
-                        usernameVariable: 'NEXUS_USERNAME',
-                        passwordVariable: 'NEXUS_PASSWORD'
-                    )
+                npm publish course-performance-dashboard-0.0.0.tgz \
+                    --registry=http://44.201.199.252:8081/repository/npm-hosted/ \
+                    --//44.201.199.252:8081/repository/npm-hosted/:_auth="$(printf '%s' "$NEXUS_USERNAME:$NEXUS_PASSWORD" | base64 -w 0)" \
+                    --//44.201.199.252:8081/repository/npm-hosted/:always-auth=true
 
-                ]) {
-
-                    sh '''
-                        ARTIFACT=$(ls -1 *.tgz | head -n 1)
-
-                        echo "Uploading artifact: $ARTIFACT"
-
-                        curl -f \
-                            -u "$NEXUS_USERNAME:$NEXUS_PASSWORD" \
-                            --upload-file "$ARTIFACT" \
-                            "$NEXUS_URL/repository/$NEXUS_REPOSITORY/$ARTIFACT"
-                    '''
-                }
-            }
+                echo "Artifact successfully published to Nexus!"
+            '''
         }
+    }
+}
 
 
         // =========================================================

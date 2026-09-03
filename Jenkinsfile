@@ -10,32 +10,32 @@ pipeline {
     environment {
 
         // =========================================================
-        // SonarQube Scanner
+        // SonarQube
         // =========================================================
         SCANNER_HOME = tool 'sonar-scanner'
 
         // =========================================================
-        // Chrome for Angular Unit Tests
+        // Chrome
         // =========================================================
         CHROME_BIN = '/usr/bin/google-chrome'
 
         // =========================================================
-        // Docker Image
+        // Docker
         // =========================================================
         DOCKER_IMAGE = 'kundatoke03/course-performance-dashboard:latest'
 
         // =========================================================
-        // AWS EKS Configuration
+        // AWS EKS
         // =========================================================
         EKS_CLUSTER = 'course-devsecops-cluster'
-
         AWS_REGION = 'us-east-1'
 
         // =========================================================
-        // Nexus Configuration
+        // Nexus
+        // IMPORTANT:
+        // Do NOT put /repository/npm-hosted here
         // =========================================================
-        NEXUS_URL = 'http://44.201.199.252:8081/repository/npm-hosted'
-
+        NEXUS_URL = 'http://44.201.199.252:8081'
         NEXUS_REPOSITORY = 'npm-hosted'
     }
 
@@ -54,6 +54,7 @@ pipeline {
             }
         }
 
+
         // =========================================================
         // 2. Install Dependencies
         // =========================================================
@@ -70,6 +71,7 @@ pipeline {
                 '''
             }
         }
+
 
         // =========================================================
         // 3. Unit Tests
@@ -98,6 +100,7 @@ pipeline {
             }
         }
 
+
         // =========================================================
         // 4. SonarQube Analysis
         // =========================================================
@@ -121,6 +124,7 @@ pipeline {
             }
         }
 
+
         // =========================================================
         // 5. OWASP Dependency Check
         // =========================================================
@@ -131,6 +135,7 @@ pipeline {
                 echo 'Scanning Angular dependencies for vulnerabilities...'
 
                 dependencyCheck(
+
                     additionalArguments:
                         '--scan package.json ' +
                         '--scan package-lock.json ' +
@@ -139,10 +144,12 @@ pipeline {
                         '--format HTML ' +
                         '--format XML ' +
                         '--failOnCVSS 11',
+
                     odcInstallation: 'DC'
                 )
             }
         }
+
 
         // =========================================================
         // 6. Deploy Angular Artifact to Nexus
@@ -154,6 +161,7 @@ pipeline {
                 echo 'Creating Angular npm artifact...'
 
                 sh '''
+                    rm -f *.tgz
                     npm pack
                 '''
 
@@ -170,18 +178,19 @@ pipeline {
                 ]) {
 
                     sh '''
-                        ARTIFACT=$(ls *.tgz | head -n 1)
+                        ARTIFACT=$(ls -1 *.tgz | head -n 1)
 
                         echo "Uploading artifact: $ARTIFACT"
 
                         curl -f \
-                        -u "$NEXUS_USERNAME:$NEXUS_PASSWORD" \
-                        --upload-file "$ARTIFACT" \
-                        "$NEXUS_URL/repository/$NEXUS_REPOSITORY/$ARTIFACT"
+                            -u "$NEXUS_USERNAME:$NEXUS_PASSWORD" \
+                            --upload-file "$ARTIFACT" \
+                            "$NEXUS_URL/repository/$NEXUS_REPOSITORY/$ARTIFACT"
                     '''
                 }
             }
         }
+
 
         // =========================================================
         // 7. Angular Build
@@ -198,6 +207,7 @@ pipeline {
             }
         }
 
+
         // =========================================================
         // 8. Build Docker Image
         // =========================================================
@@ -209,11 +219,12 @@ pipeline {
 
                 sh '''
                     docker build \
-                    -t "$DOCKER_IMAGE" \
-                    -f Dockerfile .
+                        -t "$DOCKER_IMAGE" \
+                        -f docker/Dockerfile .
                 '''
             }
         }
+
 
         // =========================================================
         // 9. Push Image to Docker Hub
@@ -237,8 +248,8 @@ pipeline {
                     sh '''
                         echo "$DOCKERHUB_PASSWORD" | \
                         docker login \
-                        --username "$DOCKERHUB_USERNAME" \
-                        --password-stdin
+                            --username "$DOCKERHUB_USERNAME" \
+                            --password-stdin
                     '''
 
                     sh '''
@@ -247,6 +258,7 @@ pipeline {
                 }
             }
         }
+
 
         // =========================================================
         // 10. Configure EKS
@@ -261,11 +273,12 @@ pipeline {
                     aws --version
 
                     aws eks update-kubeconfig \
-                    --region "$AWS_REGION" \
-                    --name "$EKS_CLUSTER"
+                        --region "$AWS_REGION" \
+                        --name "$EKS_CLUSTER"
                 '''
             }
         }
+
 
         // =========================================================
         // 11. Deploy to Kubernetes
@@ -278,13 +291,12 @@ pipeline {
 
                 sh '''
                     kubectl apply -f k8s/namespace.yaml
-
                     kubectl apply -f k8s/deployment.yaml
-
                     kubectl apply -f k8s/service.yaml
                 '''
             }
         }
+
 
         // =========================================================
         // 12. Verify Deployment
@@ -293,51 +305,45 @@ pipeline {
 
             steps {
 
-                echo 'Checking Kubernetes deployment...'
+                echo 'Verifying Kubernetes deployment...'
 
                 sh '''
-                    kubectl get nodes
-
-                    kubectl get pods -n course-dashboard
-
-                    kubectl get deployment -n course-dashboard
-
-                    kubectl get service -n course-dashboard
+                    kubectl get pods -n dev
+                    kubectl get svc -n dev
+                    kubectl rollout status deployment/course-performance-dashboard -n dev --timeout=120s
                 '''
             }
         }
     }
+
 
     // =============================================================
     // POST ACTIONS
     // =============================================================
     post {
 
+        always {
+
+            echo 'Pipeline execution completed.'
+        }
+
         success {
 
-            echo '=============================================='
-
-            echo 'Angular CI/CD Pipeline completed successfully!'
-
-            echo 'Application deployed to EKS.'
-
-            echo '=============================================='
+            echo '''
+            ==============================================
+            Angular CI/CD Pipeline completed successfully!
+            ==============================================
+            '''
         }
 
         failure {
 
-            echo '=============================================='
-
-            echo 'Angular CI/CD Pipeline failed!'
-
-            echo 'Check the failed stage in Console Output.'
-
-            echo '=============================================='
-        }
-
-        always {
-
-            echo 'Pipeline execution completed.'
+            echo '''
+            ==============================================
+            Angular CI/CD Pipeline failed!
+            Check the failed stage in Console Output.
+            ==============================================
+            '''
         }
     }
 }
